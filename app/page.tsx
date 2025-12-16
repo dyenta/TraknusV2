@@ -1,16 +1,347 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
+import { 
+  LayoutGrid, 
+  RefreshCcw, 
+  Filter, 
+  MinusSquare, 
+  PlusSquare, 
+  Database, 
+  ArrowUp, 
+  ArrowDown, 
+  ChevronDown, 
+  Check 
+} from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
-import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database } from 'lucide-react'
 
-// Local Imports (Colocated)
-import { AggregatedRecord } from './analytics/types'
-import { ROW_OPTIONS, MONTH_OPTIONS } from './analytics/constants'
-import { usePivotLogic } from './analytics/usePivotLogic'
-import { MultiSelect } from './analytics/MultiSelect'
-import { YoYBadge } from './analytics/YoYBadge'
-import { ControlBox } from './analytics/ControlBox'
+// ==========================================
+// 1. TYPES
+// ==========================================
+
+export interface AggregatedRecord {
+  year: number;
+  month: number;
+  col_label_1: string;
+  col_label_2: string;
+  col_label_3: string;
+  total_amount: number;
+}
+
+export interface PivotNode {
+  id: string;          
+  label: string;       
+  level: number;       
+  isLeaf: boolean;     
+  values: Record<string, number>; 
+  rowTotal: number;    
+  children?: PivotNode[]; 
+}
+
+// ==========================================
+// 2. CONSTANTS
+// ==========================================
+
+export const ROW_OPTIONS = [
+  { label: 'Hierarki: Account > Group > Biz Area', value: 'hierarchy_account' },
+  { label: 'Hierarki: Business Area > PSS', value: 'hierarchy_ba_pss' },
+  { label: 'Business Area', value: 'business_area' },
+  { label: 'Product', value: 'product' }
+]
+
+export const MONTH_OPTIONS = [
+    { label: 'Jan', value: '1' }, { label: 'Feb', value: '2' }, { label: 'Mar', value: '3' },
+    { label: 'Apr', value: '4' }, { label: 'Mei', value: '5' }, { label: 'Jun', value: '6' },
+    { label: 'Jul', value: '7' }, { label: 'Agu', value: '8' }, { label: 'Sep', value: '9' },
+    { label: 'Okt', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Des', value: '12' }
+]
+
+// ==========================================
+// 3. UI COMPONENTS
+// ==========================================
+
+// --- YoYBadge Component ---
+export function YoYBadge({ current, previous }: { current: number, previous: number }) {
+    if (previous === 0) return null;
+    const diff = current - previous
+    const percent = (diff / previous) * 100
+    const isUp = percent > 0
+    const isNeutral = percent === 0
+    if (current === 0) return <span className="text-[9px] text-slate-300">-</span>
+
+    return (
+        <div className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
+            {isUp ? <ArrowUp size={8} /> : (!isNeutral && <ArrowDown size={8} />)}
+            <span>{Math.abs(percent).toFixed(1)}%</span>
+        </div>
+    )
+}
+
+// --- ControlBox Component ---
+export function ControlBox({ label, value, onChange, options, color }: any) {
+    return (
+        <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2 w-full md:w-auto hover:border-blue-400 transition-colors">
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-${color}-50 text-${color}-700 whitespace-nowrap`}>{label}</span>
+            <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 w-full focus:outline-none cursor-pointer py-1">
+                {options.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+        </div>
+    )
+}
+
+// --- MultiSelect Component ---
+interface MultiSelectProps {
+    label: string;
+    options?: string[];
+    optionsRaw?: { label: string, value: string }[];
+    selected: string[];
+    onChange: (val: string[]) => void;
+}
+
+export function MultiSelect({ label, options, optionsRaw, selected, onChange }: MultiSelectProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  
+  const finalOptions = optionsRaw || (options ? options.map(o => ({ label: o, value: o })) : [])
+  
+  useEffect(() => {
+    function handleClickOutside(event: any) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false)
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+  
+  const isAllSelected = selected.includes('All') || (finalOptions.length > 0 && selected.length === finalOptions.length)
+  
+  const toggleOption = (val: string) => {
+    if (val === 'All') onChange(isAllSelected ? [] : ['All'])
+    else {
+      let newSelected = [...selected]
+      if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
+      
+      if (newSelected.includes(val)) newSelected = newSelected.filter(item => item !== val)
+      else newSelected.push(val)
+      
+      if (newSelected.length === finalOptions.length) onChange(['All'])
+      else onChange(newSelected)
+    }
+  }
+
+  const getDisplayLabel = () => {
+      if (selected.includes('All')) return 'All'
+      if (selected.length === 0) return 'None'
+      
+      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)))
+
+      if (isNumeric) {
+          const sortedIndices = selected
+              .map(val => parseInt(val))
+              .sort((a, b) => a - b)
+
+          const ranges: string[] = []
+          let start = sortedIndices[0]
+          let prev = sortedIndices[0]
+
+          for (let i = 1; i < sortedIndices.length; i++) {
+              const current = sortedIndices[i]
+              if (current === prev + 1) {
+                  prev = current
+              } else {
+                  const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
+                  const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
+                  ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
+                  start = current
+                  prev = current
+              }
+          }
+          const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
+          const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
+          ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
+          return ranges.join(', ')
+      } 
+      
+      const names = selected.map(val => finalOptions.find(o => o.value === val)?.label).filter(Boolean)
+      if (names.length > 2) return `${names[0]}, ${names[1]} +${names.length - 2}`
+      return names.join(', ')
+  }
+  
+  return (
+    <div className="relative" ref={dropdownRef}>
+       <div className="flex flex-col">
+         <label className="text-[10px] font-bold text-slate-400 ml-1 mb-0.5 uppercase tracking-wider">{label}</label>
+         <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 min-w-25 max-w-45 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm transition-all ${isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
+            <span className="truncate font-medium text-slate-700 block">{getDisplayLabel()}</span>
+            <ChevronDown size={14} className="text-slate-400 shrink-0" />
+         </button>
+       </div>
+       
+       {isOpen && (
+         <div className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1">
+            <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1 sticky top-0 bg-white z-10">
+              <div className={`w-3 h-3 rounded border flex items-center justify-center ${isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                 {isAllSelected && <Check size={8} className="text-white" />}
+              </div>
+              Select All
+            </div>
+            {finalOptions.map(opt => {
+               const isSelected = selected.includes(opt.value) || selected.includes('All')
+               return (
+                  <div key={opt.value} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
+                    <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                      {isSelected && <Check size={8} className="text-white" />}
+                    </div>
+                    {opt.label}
+                  </div>
+               )
+            })}
+         </div>
+       )}
+    </div>
+  )
+}
+
+// ==========================================
+// 4. CUSTOM HOOK
+// ==========================================
+
+interface UsePivotLogicProps {
+  data: AggregatedRecord[];
+  rowDimension: string;
+  expandedCols: Record<string, boolean>;
+  expandedRows: Record<string, boolean>;
+}
+
+export function usePivotLogic({ data, rowDimension, expandedCols, expandedRows }: UsePivotLogicProps) {
+  
+  // 1. MEMOIZED PIVOT CALCULATION
+  const pivotData = useMemo(() => {
+    const uniqueYearsSet = new Set<string>()
+    data.forEach(d => uniqueYearsSet.add(String(d.year)))
+    const sortedYears = Array.from(uniqueYearsSet).sort()
+
+    // A. Columns Logic
+    const finalColKeys: string[] = []
+    sortedYears.forEach(year => {
+        if (expandedCols[year]) {
+            const monthsInYear = new Set<number>()
+            data.filter(d => String(d.year) === year).forEach(d => monthsInYear.add(d.month))
+            const sortedMonths = Array.from(monthsInYear).sort((a,b) => a - b)
+            sortedMonths.forEach(m => finalColKeys.push(`${year}-${m < 10 ? '0'+m : m}`))
+            finalColKeys.push(`${year}-Total`)
+        } else {
+            finalColKeys.push(year)
+        }
+    })
+
+    // B. Tree Logic
+    const colTotals: Record<string, number> = {}
+    let grandTotal = 0
+    const rootMap: Record<string, PivotNode> = {}
+
+    for (const item of data) {
+      const yearStr = String(item.year)
+      const monthStr = item.month < 10 ? `0${item.month}` : String(item.month)
+      const val = item.total_amount || 0
+      
+      const keysToUpdate = [yearStr, `${yearStr}-${monthStr}`, `${yearStr}-Total`]
+
+      grandTotal += val
+      
+      for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
+
+      let levels: string[] = []
+      
+      if (rowDimension === 'hierarchy_account') {
+         levels = [item.col_label_1, item.col_label_2, item.col_label_3]
+      } else if (rowDimension === 'hierarchy_ba_pss') {
+         levels = [item.col_label_1, item.col_label_2]
+      } else {
+         levels = [item.col_label_1]
+      }
+      levels = levels.filter(l => l && l !== '-')
+
+      let currentMap = rootMap
+      let currentIdPath = ""
+
+      levels.forEach((lvlLabel, idx) => {
+        const isLastLevel = idx === levels.length - 1
+        currentIdPath = currentIdPath ? `${currentIdPath}|${lvlLabel}` : lvlLabel
+        
+        if (!currentMap[lvlLabel]) {
+            currentMap[lvlLabel] = {
+                id: currentIdPath,
+                label: lvlLabel,
+                level: idx,
+                isLeaf: isLastLevel,
+                values: {}, 
+                rowTotal: 0,
+            }
+        }
+        
+        const node = currentMap[lvlLabel]
+        for (const k of keysToUpdate) node.values[k] = (node.values[k] || 0) + val
+        node.rowTotal += val
+
+        if (!isLastLevel) {
+            if (!(node as any).childrenMap) { (node as any).childrenMap = {} }
+            currentMap = (node as any).childrenMap
+        }
+      })
+    }
+
+    const processChildren = (map: Record<string, PivotNode>): PivotNode[] => {
+        return Object.values(map)
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map(node => {
+                if ((node as any).childrenMap) {
+                    node.children = processChildren((node as any).childrenMap)
+                    delete (node as any).childrenMap
+                }
+                return node
+            })
+    }
+
+    return { 
+        roots: processChildren(rootMap), 
+        colKeys: finalColKeys, 
+        colTotals, 
+        grandTotal
+    }
+  }, [data, rowDimension, expandedCols])
+
+  // 2. FLATTEN VISIBLE ROWS
+  const visibleRows = useMemo(() => {
+    const rows: PivotNode[] = []
+    const traverse = (nodes: PivotNode[]) => {
+        nodes.forEach(node => {
+            rows.push(node)
+            if (node.children && expandedRows[node.id]) {
+                traverse(node.children)
+            }
+        })
+    }
+    traverse(pivotData.roots)
+    return rows
+  }, [pivotData.roots, expandedRows])
+
+  // 3. HELPER HEADER
+  const getHeaderInfo = (colKey: string) => {
+      if (colKey.includes('-Total')) return { type: 'subtotal', label: 'TOTAL', parent: colKey.split('-')[0] }
+      if (colKey.includes('-')) {
+          const [y, m] = colKey.split('-')
+          const monthLabel = MONTH_OPTIONS.find(o => o.value === String(parseInt(m)))?.label || m
+          return { type: 'month', label: monthLabel, parent: y }
+      }
+      return { type: 'year', label: colKey, parent: colKey }
+  }
+
+  return { pivotData, visibleRows, getHeaderInfo }
+}
+
+// ==========================================
+// 5. MAIN PAGE COMPONENT
+// ==========================================
 
 export default function PivotPage() {
   // --- STATE ---
