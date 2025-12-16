@@ -12,7 +12,10 @@ import {
   ArrowDown, 
   ChevronDown, 
   Check,
-  Layers
+  Layers,
+  ZoomIn,
+  ZoomOut,
+  Maximize
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -26,6 +29,7 @@ export interface AggregatedRecord {
   col_label_1: string;
   col_label_2: string;
   col_label_3: string;
+  col_label_4: string; 
   total_amount: number;
 }
 
@@ -44,7 +48,7 @@ export interface PivotNode {
 // ==========================================
 
 export const DIMENSION_OPTIONS = [
-  { label: '(None)', value: '' }, // Opsi kosong
+  { label: '(None)', value: '' }, 
   { label: 'Business Area', value: 'business_area' },
   { label: 'PSS', value: 'pss' },
   { label: 'Key Account Type', value: 'key_account_type' },
@@ -81,12 +85,12 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     )
 }
 
-// --- ControlBox Component (Updated) ---
+// --- ControlBox Component ---
 export function ControlBox({ label, value, onChange, options, color }: any) {
     return (
-        <div className={`bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2 w-full md:w-auto hover:border-${color}-400 transition-colors`}>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-${color}-50 text-${color}-700 whitespace-nowrap`}>{label}</span>
-            <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 w-full focus:outline-none cursor-pointer py-1 min-w-[120px]">
+        <div className={`bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 transition-colors`}>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-${color}-50 text-${color}-700 whitespace-nowrap shrink-0`}>{label}</span>
+            <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 w-full focus:outline-none cursor-pointer py-1 min-w-12.5 truncate">
                 {options.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
         </div>
@@ -167,8 +171,8 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
     <div className="relative" ref={dropdownRef}>
        <div className="flex flex-col">
          <label className="text-[10px] font-bold text-slate-400 ml-1 mb-0.5 uppercase tracking-wider">{label}</label>
-         <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 min-w-25 max-w-45 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm transition-all ${isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
-            <span className="truncate font-medium text-slate-700 block">{getDisplayLabel()}</span>
+         <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm transition-all ${isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
+            <span className="truncate font-medium text-slate-700 block max-w-25 md:max-w-35">{getDisplayLabel()}</span>
             <ChevronDown size={14} className="text-slate-400 shrink-0" />
          </button>
        </div>
@@ -246,12 +250,14 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
       
       for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
 
-      // LOGIC BARU: Mengambil hierarki dari kolom yang dikirim database
-      let levels = [item.col_label_1, item.col_label_2, item.col_label_3]
-      // Bersihkan label yang kosong atau placeholder '-'
-      levels = levels.filter(l => l && l !== '-' && l !== 'Others' && l !== '(None)')
+      let levels = [
+        item.col_label_1, 
+        item.col_label_2, 
+        item.col_label_3, 
+        item.col_label_4 
+      ]
       
-      // Jika kosong (misal data error), masukkan ke grup default
+      levels = levels.filter(l => l && l !== '-' && l !== 'Others' && l !== '(None)')
       if (levels.length === 0) levels = ['Uncategorized']
 
       let currentMap = rootMap
@@ -342,10 +348,11 @@ export default function PivotPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  // STATE UNTUK HIERARKI DINAMIS
+  // FILTER STATE
   const [lvl1, setLvl1] = useState<string>('business_area')
   const [lvl2, setLvl2] = useState<string>('pss')
-  const [lvl3, setLvl3] = useState<string>('') 
+  const [lvl3, setLvl3] = useState<string>('product') 
+  const [lvl4, setLvl4] = useState<string>('') 
 
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
@@ -356,6 +363,9 @@ export default function PivotPage() {
 
   const [optionAreas, setOptionAreas] = useState<string[]>([])
   const [optionYears, setOptionYears] = useState<string[]>([])
+
+  // [BARU] ZOOM STATE
+  const [zoomLevel, setZoomLevel] = useState<number>(1)
 
   // --- CUSTOM HOOK LOGIC ---
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({
@@ -381,11 +391,11 @@ export default function PivotPage() {
 
   useEffect(() => {
     fetchAggregatedData()
-  }, [lvl1, lvl2, lvl3, selectedYears, selectedAreas, selectedMonths]) 
+  }, [lvl1, lvl2, lvl3, lvl4, selectedYears, selectedAreas, selectedMonths]) 
 
   useEffect(() => {
     setExpandedRows({})
-  }, [lvl1, lvl2, lvl3])
+  }, [lvl1, lvl2, lvl3, lvl4])
 
   const fetchAggregatedData = async () => {
     setLoading(true)
@@ -395,11 +405,11 @@ export default function PivotPage() {
         monthInts = selectedMonths.map(m => parseInt(m))
       }
 
-      // Memanggil fungsi baru dengan parameter dinamis
       const { data: rpcData, error } = await supabase.rpc('get_sales_analytics', {
         lvl1_field: lvl1,
         lvl2_field: lvl2,
         lvl3_field: lvl3,
+        lvl4_field: lvl4, 
         filter_years: selectedYears,
         filter_areas: selectedAreas,
         filter_months: monthInts 
@@ -416,7 +426,7 @@ export default function PivotPage() {
   }
 
   const handleRefreshDatabase = async () => {
-    if(!confirm("Update Data dari Master? Proses ini mungkin butuh waktu.")) return;
+    if(!confirm("Update Data dari Master?")) return;
     setIsRefreshing(true)
     try {
       const { error } = await supabase.rpc('refresh_sales_data')
@@ -425,7 +435,7 @@ export default function PivotPage() {
       alert('Data berhasil diperbarui!')
     } catch (err: any) {
       console.error('Refresh DB Error:', err.message)
-      alert('Gagal memperbarui data database.')
+      alert('Gagal memperbarui data.')
     } finally {
       setIsRefreshing(false)
     }
@@ -436,60 +446,87 @@ export default function PivotPage() {
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-800">
-      <div className="max-w-[1600px] mx-auto space-y-5">
+    <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
+      <div className="max-w-400 mx-auto space-y-4">
         
-        {/* HEADER SECTION */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row justify-between items-center gap-4 z-50 relative">
+        {/* HEADER SECTION - RESPONSIVE */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 z-50 relative">
           <div className="flex flex-col">
             <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
                 <LayoutGrid className="text-blue-600" size={24} /> 
                 Sales Analytics
             </h1>
-            <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Aggregation</p>
+            <p className="text-xs text-slate-400 mt-1 ml-8">4-Level Dynamic Pivot</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-             <MultiSelect label="Area" options={optionAreas} selected={selectedAreas} onChange={setSelectedAreas} />
-             <div className="w-px h-6 bg-slate-200 mx-1"></div>
-             <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
-             <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
+          <div className="w-full lg:w-auto flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
+             <div className="flex gap-2 w-full sm:w-auto">
+                <MultiSelect label="Area" options={optionAreas} selected={selectedAreas} onChange={setSelectedAreas} />
+                <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
+                <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
+             </div>
+             <div className="flex gap-2 w-full sm:w-auto">
+                <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
 
-             <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm transition-colors" title="Refresh Tampilan">
-                <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
-             </button>
+                <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm transition-colors grow sm:grow-0 flex justify-center" title="Refresh Tampilan">
+                    <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+                </button>
 
-             <button 
-                onClick={handleRefreshDatabase} 
-                disabled={isRefreshing || loading}
-                className="ml-2 px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-all"
-             >
-                <Database size={14} className={isRefreshing ? "animate-pulse" : ""} />
-                {isRefreshing ? 'Sync DB' : 'Update DB'}
-             </button>
+                <button 
+                    onClick={handleRefreshDatabase} 
+                    disabled={isRefreshing || loading}
+                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all grow sm:grow-0"
+                >
+                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} />
+                    {isRefreshing ? 'Sync' : 'Update'}
+                </button>
+             </div>
           </div>
         </div>
 
-        {/* DYNAMIC HIERARCHY CONTROLS */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-3 relative z-40">
-           <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2">
-              <Layers size={16} />
-              <span>Susunan Hierarki:</span>
-           </div>
+        {/* CONTROLS SECTION */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
-             <ControlBox label="Level 1" value={lvl1} onChange={setLvl1} options={DIMENSION_OPTIONS} color="indigo" />
-             <ControlBox label="Level 2" value={lvl2} onChange={setLvl2} options={DIMENSION_OPTIONS} color="indigo" />
-             <ControlBox label="Level 3" value={lvl3} onChange={setLvl3} options={DIMENSION_OPTIONS} color="indigo" />
+           {/* [BARU] ZOOM CONTROL FOR MOBILE */}
+           <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
+              <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                  <Maximize size={16} />
+                  <span>Zoom View</span>
+              </div>
+              <div className="flex items-center gap-3 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
+                  <ZoomOut size={14} className="text-slate-400" />
+                  <input 
+                    type="range" 
+                    min="0.4" 
+                    max="1.5" 
+                    step="0.1" 
+                    value={zoomLevel} 
+                    onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                    className="w-24 md:w-32 cursor-pointer h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"
+                  />
+                  <ZoomIn size={14} className="text-slate-400" />
+                  <span className="text-[10px] font-mono text-slate-500 w-8 text-right">{(zoomLevel * 100).toFixed(0)}%</span>
+              </div>
            </div>
 
-           <div className="hidden md:block text-[10px] text-slate-400 italic ml-auto">
-             *Atur urutan pengelompokan data sesuai kebutuhan (mis: Business Area &gt; PSS &gt; Product)
+           {/* HIERARCHY CONTROLS */}
+           <div className="w-full flex flex-col md:flex-row items-center gap-3">
+               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0">
+                  <Layers size={16} />
+                  <span>Hierarki:</span>
+               </div>
+               
+               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
+                 <ControlBox label="Lvl 1" value={lvl1} onChange={setLvl1} options={DIMENSION_OPTIONS} color="indigo" />
+                 <ControlBox label="Lvl 2" value={lvl2} onChange={setLvl2} options={DIMENSION_OPTIONS} color="indigo" />
+                 <ControlBox label="Lvl 3" value={lvl3} onChange={setLvl3} options={DIMENSION_OPTIONS} color="indigo" />
+                 <ControlBox label="Lvl 4" value={lvl4} onChange={setLvl4} options={DIMENSION_OPTIONS} color="indigo" />
+               </div>
            </div>
         </div>
 
         {/* TABLE CONTAINER */}
-        <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[70vh] relative z-0">
+        <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0">
           
           {(loading || isRefreshing) && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
@@ -502,11 +539,14 @@ export default function PivotPage() {
              </div>
           )}
 
-          <div className="overflow-auto flex-1 relative">
-            <table className="w-full text-sm border-collapse min-w-250">
+          {/* [UPDATED] WRAPPER DENGAN STYLE ZOOM */}
+          <div className="overflow-auto flex-1 relative w-full">
+            <div style={{ zoom: zoomLevel } as any} className="min-w-fit origin-top-left"> 
+            
+            <table className="w-full text-sm border-collapse">
               <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 min-w-75 sticky left-0 z-30">
+                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 min-w-50 sticky left-0 z-30">
                      STRUKTUR DATA
                   </th>
                   {pivotData.colKeys.map(colKey => {
@@ -539,13 +579,15 @@ export default function PivotPage() {
                 {visibleRows.length > 0 ? visibleRows.map(node => (
                     <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
                       <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10">
-                        <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 24}px` }}>
+                        <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 20}px` }}>
                             {!node.isLeaf ? (
                                 <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
                                     {expandedRows[node.id] ? <MinusSquare size={16} /> : <PlusSquare size={16} />}
                                 </button>
                             ) : <span className="w-4 h-4" />}
-                            <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>{node.label}</span>
+                            <span className={`truncate max-w-62.5 block ${node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}`} title={node.label}>
+                                {node.label}
+                            </span>
                         </div>
                       </td>
                       {pivotData.colKeys.map(colKey => {
@@ -597,6 +639,8 @@ export default function PivotPage() {
                 </tr>
               </tfoot>
             </table>
+            
+            </div>
           </div>
         </div>
       </div>
