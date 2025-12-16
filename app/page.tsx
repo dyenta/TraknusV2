@@ -364,7 +364,7 @@ export default function PivotPage() {
   const [optionAreas, setOptionAreas] = useState<string[]>([])
   const [optionYears, setOptionYears] = useState<string[]>([])
 
-  // [BARU] ZOOM STATE
+  // ZOOM STATE
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
   // --- CUSTOM HOOK LOGIC ---
@@ -487,7 +487,7 @@ export default function PivotPage() {
         {/* CONTROLS SECTION */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            
-           {/* [BARU] ZOOM CONTROL FOR MOBILE */}
+           {/* ZOOM CONTROL FOR MOBILE */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
                   <Maximize size={16} />
@@ -539,15 +539,16 @@ export default function PivotPage() {
              </div>
           )}
 
-          {/* [UPDATED] WRAPPER DENGAN STYLE ZOOM */}
+          {/* WRAPPER DENGAN STYLE ZOOM */}
           <div className="overflow-auto flex-1 relative w-full">
             <div style={{ zoom: zoomLevel } as any} className="min-w-fit origin-top-left"> 
             
             <table className="w-full text-sm border-collapse">
               <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 min-w-50 sticky left-0 z-30">
-                     STRUKTUR DATA
+                  {/* [UPDATED] SIZING FIXED REMOVED, ADDED WHITESPACE-NOWRAP */}
+                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-30">
+                     HIERARKI
                   </th>
                   {pivotData.colKeys.map(colKey => {
                     const info = getHeaderInfo(colKey)
@@ -578,14 +579,16 @@ export default function PivotPage() {
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 {visibleRows.length > 0 ? visibleRows.map(node => (
                     <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
-                      <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10">
+                      <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 whitespace-nowrap">
                         <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 20}px` }}>
                             {!node.isLeaf ? (
                                 <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
                                     {expandedRows[node.id] ? <MinusSquare size={16} /> : <PlusSquare size={16} />}
                                 </button>
                             ) : <span className="w-4 h-4" />}
-                            <span className={`truncate max-w-62.5 block ${node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}`} title={node.label}>
+                            
+                            {/* [UPDATED] HAPUS TRUNCATE & MAX-W AGAR PAS KONTEN */}
+                            <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>
                                 {node.label}
                             </span>
                         </div>
@@ -627,7 +630,7 @@ export default function PivotPage() {
               </tbody>
               <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                 <tr>
-                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300">GRAND TOTAL</td>
+                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap">GRAND TOTAL</td>
                     {pivotData.colKeys.map(colKey => {
                         const info = getHeaderInfo(colKey)
                         return (
