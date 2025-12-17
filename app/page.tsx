@@ -15,7 +15,9 @@ import {
   Layers,
   ZoomIn,
   ZoomOut,
-  Maximize
+  Maximize,
+  Search, // Icon baru untuk pencarian
+  X       // Icon baru untuk clear pencarian
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -77,7 +79,6 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     const isNeutral = percent === 0
     if (current === 0) return <span className="text-[9px] text-slate-300">-</span>
 
-    // Menggunakan em agar badge ikut ter-zoom proporsional
     return (
         <div className={`flex items-center gap-[0.2em] text-[0.7em] font-bold px-[0.5em] py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
             {isUp ? <ArrowUp style={{ width: '0.8em', height: '0.8em'}} /> : (!isNeutral && <ArrowDown style={{ width: '0.8em', height: '0.8em'}} />)}
@@ -98,10 +99,10 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- MultiSelect Component ---
+// --- SEARCHABLE MultiSelect Component (FIXED NULL ERROR) ---
 interface MultiSelectProps {
     label: string;
-    options?: string[];
+    options?: (string | null)[]; // Izinkan null
     optionsRaw?: { label: string, value: string }[];
     selected: string[];
     onChange: (val: string[]) => void;
@@ -109,13 +110,34 @@ interface MultiSelectProps {
 
 export function MultiSelect({ label, options, optionsRaw, selected, onChange }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("") 
   const dropdownRef = useRef<HTMLDivElement>(null)
   
-  const finalOptions = optionsRaw || (options ? options.map(o => ({ label: o, value: o })) : [])
+  // 1. Normalisasi opsi (Handle Null Value di sini)
+  const finalOptions = useMemo(() => {
+    if (optionsRaw) return optionsRaw;
+    if (options) {
+        return options.map(o => ({ 
+            label: o || "(Empty)", // Ubah null jadi teks "(Empty)"
+            value: o || ""         // Ubah null jadi string kosong untuk value
+        }))
+    }
+    return []
+  }, [options, optionsRaw])
+  
+  // 2. LOGIKA FILTERING (PENCARIAN) - AMAN DARI NULL
+  const filteredOptions = finalOptions.filter(opt => {
+    // Pastikan label ada sebelum toLowerCase. Jika null/undefined, anggap string kosong.
+    const labelText = opt.label || ""; 
+    return labelText.toLowerCase().includes(searchTerm.toLowerCase())
+  })
   
   useEffect(() => {
     function handleClickOutside(event: any) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false)
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false)
+        setSearchTerm("") 
+      }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
@@ -124,13 +146,17 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   const isAllSelected = selected.includes('All') || (finalOptions.length > 0 && selected.length === finalOptions.length)
   
   const toggleOption = (val: string) => {
-    if (val === 'All') onChange(isAllSelected ? [] : ['All'])
-    else {
+    if (val === 'All') {
+        onChange(isAllSelected ? [] : ['All'])
+    } else {
       let newSelected = [...selected]
       if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
       
-      if (newSelected.includes(val)) newSelected = newSelected.filter(item => item !== val)
-      else newSelected.push(val)
+      if (newSelected.includes(val)) {
+          newSelected = newSelected.filter(item => item !== val)
+      } else {
+          newSelected.push(val)
+      }
       
       if (newSelected.length === finalOptions.length) onChange(['All'])
       else onChange(newSelected)
@@ -141,7 +167,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
       if (selected.includes('All')) return 'All'
       if (selected.length === 0) return 'None'
       
-      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)))
+      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "")
 
       if (isNumeric) {
           const sortedIndices = selected.map(val => parseInt(val)).sort((a, b) => a - b)
@@ -159,7 +185,9 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
           }
           const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
           const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
-          ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
+          if (startLabel) {
+             ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
+          }
           return ranges.join(', ')
       } 
       
@@ -173,30 +201,63 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
        <div className="flex flex-col">
          <label className="text-[10px] font-bold text-slate-400 ml-1 mb-0.5 uppercase tracking-wider">{label}</label>
          <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm transition-all ${isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
-            <span className="truncate font-medium text-slate-700 block max-w-25 md:max-w-35">{getDisplayLabel()}</span>
+            <span className="truncate font-medium text-slate-700 block max-w-25 md:max-w-35 text-left">{getDisplayLabel()}</span>
             <ChevronDown size={14} className="text-slate-400 shrink-0" />
          </button>
        </div>
        
        {isOpen && (
-         <div className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1">
-            <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1 sticky top-0 bg-white z-10">
-              <div className={`w-3 h-3 rounded border flex items-center justify-center ${isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                 {isAllSelected && <Check size={8} className="text-white" />}
-              </div>
-              Select All
+         <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1 flex flex-col">
+            
+            <div className="sticky top-0 bg-white z-20 pb-1 border-b border-slate-100 p-2">
+                <div className="relative flex items-center">
+                    <Search size={12} className="absolute left-2 text-slate-400" />
+                    <input 
+                        type="text"
+                        placeholder={`Cari ${label}...`}
+                        className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:outline-none focus:border-blue-500 transition-colors"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        autoFocus
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm("")} className="absolute right-2 text-slate-400 hover:text-slate-600">
+                            <X size={12} />
+                        </button>
+                    )}
+                </div>
             </div>
-            {finalOptions.map(opt => {
-               const isSelected = selected.includes(opt.value) || selected.includes('All')
-               return (
-                  <div key={opt.value} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
-                    <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                      {isSelected && <Check size={8} className="text-white" />}
+
+            <div className="overflow-y-auto max-h-60 pt-1">
+                {!searchTerm && (
+                    <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1">
+                        <div className={`w-3 h-3 rounded border flex items-center justify-center ${isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                            {isAllSelected && <Check size={8} className="text-white" />}
+                        </div>
+                        Select All
                     </div>
-                    {opt.label}
-                  </div>
-               )
-            })}
+                )}
+
+                {filteredOptions.length > 0 ? (
+                    filteredOptions.map(opt => {
+                        const isSelected = selected.includes(opt.value) || selected.includes('All')
+                        return (
+                            <div key={opt.value} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
+                                <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                                    {isSelected && <Check size={8} className="text-white" />}
+                                </div>
+                                <span className={isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'}>
+                                    {opt.label}
+                                </span>
+                            </div>
+                        )
+                    })
+                ) : (
+                    <div className="px-3 py-4 text-center text-xs text-slate-400 italic">
+                        Tidak ada hasil "{searchTerm}"
+                    </div>
+                )}
+            </div>
          </div>
        )}
     </div>
@@ -204,7 +265,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
 }
 
 // ==========================================
-// 4. CUSTOM HOOK
+// 4. CUSTOM HOOK (PIVOT LOGIC)
 // ==========================================
 
 interface UsePivotLogicProps {
@@ -345,20 +406,36 @@ export default function PivotPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  // FILTER STATE
+  // FILTER STATE - SELECTIONS
   const [lvl1, setLvl1] = useState<string>('business_area')
-  const [lvl2, setLvl2] = useState<string>('pss')
-  const [lvl3, setLvl3] = useState<string>('product') 
+  const [lvl2, setLvl2] = useState<string>('product')
+  const [lvl3, setLvl3] = useState<string>('') 
   const [lvl4, setLvl4] = useState<string>('') 
 
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
 
-  const [selectedAreas, setSelectedAreas] = useState<string[]>(['All'])
+  // Selected Values
   const [selectedYears, setSelectedYears] = useState<string[]>(['All'])
   const [selectedMonths, setSelectedMonths] = useState<string[]>(['All']) 
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(['All'])
+  const [selectedBusinessAreas, setSelectedBusinessAreas] = useState<string[]>(['All'])
+  const [selectedPSS, setSelectedPSS] = useState<string[]>(['All'])
+  const [selectedKAT, setSelectedKAT] = useState<string[]>(['All'])
+  const [selectedCustGroups, setSelectedCustGroups] = useState<string[]>(['All'])
+  const [selectedProducts, setSelectedProducts] = useState<string[]>(['All'])
 
-  const [optionAreas, setOptionAreas] = useState<string[]>([])
+  // DYNAMIC OPTION STATE (Unified)
+  const [filterOptions, setFilterOptions] = useState({
+    areas: [] as string[],
+    business_areas: [] as string[],
+    pss: [] as string[],
+    key_account_types: [] as string[],
+    products: [] as string[],
+    cust_groups: [] as string[],
+  })
+  
+  // Static/Cached Options (Years usually don't change dynamically based on product)
   const [optionYears, setOptionYears] = useState<string[]>([])
 
   // ZOOM STATE
@@ -368,30 +445,68 @@ export default function PivotPage() {
     data, expandedCols, expandedRows
   })
 
+  // --- 1. FETCH INITIAL YEARS (Static) ---
   useEffect(() => {
-    const fetchFilters = async () => {
-      try {
-        const { data, error } = await supabase.rpc('get_unique_filters')
-        if (error) throw error
-        if (data) {
-          if (data.areas) setOptionAreas(data.areas.filter((i: any) => i))
-          if (data.years) setOptionYears(data.years.map((y: any) => String(y)))
-        }
-      } catch (err: any) {
-        console.error('Filter Error:', err.message)
-      }
+    const fetchYears = async () => {
+       const { data } = await supabase.from('filter_cache').select('value').eq('type', 'year')
+       if(data) setOptionYears(data.map(d => d.value).sort())
     }
-    fetchFilters()
+    fetchYears()
   }, [])
 
+  // --- 2. FETCH DYNAMIC FILTERS ---
+  // Logika Cascading: Pilihan di satu filter mengubah opsi filter lain
   useEffect(() => {
-    fetchAggregatedData()
-  }, [lvl1, lvl2, lvl3, lvl4, selectedYears, selectedAreas, selectedMonths]) 
+    const fetchDynamicOptions = async () => {
+      try {
+        const getParam = (arr: string[]) => (arr.includes('All') || arr.length === 0) ? null : arr[0]
 
+        const { data, error } = await supabase.rpc('get_dynamic_filter_options', {
+            p_year: getParam(selectedYears),
+            p_month: getParam(selectedMonths),
+            p_area: getParam(selectedAreas),
+            p_ba: getParam(selectedBusinessAreas),
+            p_pss: getParam(selectedPSS),
+            p_kat: getParam(selectedKAT),
+            p_cust_group: getParam(selectedCustGroups),
+            p_product: getParam(selectedProducts),
+        })
+
+        if (error) throw error
+        
+        if (data) {
+           setFilterOptions({
+             areas: data.area || [],
+             business_areas: data.business_area || [],
+             pss: data.pss || [],
+             key_account_types: data.key_account_type || [],
+             products: data.product || [],
+             cust_groups: data.cust_group || [],
+           })
+        }
+      } catch (err) {
+        console.error("Dynamic Filter Error:", err)
+      }
+    }
+
+    fetchDynamicOptions()
+    
+    // Refresh data tabel/chart juga
+    fetchAggregatedData()
+
+  }, [
+    selectedYears, selectedMonths, selectedAreas,
+    selectedBusinessAreas, selectedPSS, selectedKAT, 
+    selectedCustGroups, selectedProducts
+  ]) 
+
+  // Reset Row Expand saat level berubah
   useEffect(() => {
     setExpandedRows({})
   }, [lvl1, lvl2, lvl3, lvl4])
 
+
+  // --- 3. FETCH DATA TABLE ---
   const fetchAggregatedData = async () => {
     setLoading(true)
     try {
@@ -407,7 +522,12 @@ export default function PivotPage() {
         lvl4_field: lvl4, 
         filter_years: selectedYears,
         filter_areas: selectedAreas,
-        filter_months: monthInts 
+        filter_months: monthInts,
+        filter_business_areas: selectedBusinessAreas,
+        filter_pss: selectedPSS,
+        filter_key_account_types: selectedKAT,
+        filter_cust_groups: selectedCustGroups,
+        filter_products: selectedProducts
       })
 
       if (error) throw error
@@ -420,17 +540,37 @@ export default function PivotPage() {
     }
   }
 
+  // --- 4. HANDLE REFRESH DB (WAIT/LOADING VERSION) ---
   const handleRefreshDatabase = async () => {
-    if(!confirm("Update Data dari Master?")) return;
+    // Peringatan ke user karena proses ini bisa lama
+    if(!confirm("Update Data dari Master? \n\nPERINGATAN: Proses ini mungkin memakan waktu lama (30-60+ detik).\nMohon jangan tutup browser sampai selesai.")) return;
+    
     setIsRefreshing(true)
+    console.log("Memulai refresh database...")
+
     try {
+      // 1. Panggil RPC dan TUNGGU (await) sampai benar-benar selesai
+      // Tidak ada "fake timeout", kita biarkan browser menunggu respons server
       const { error } = await supabase.rpc('refresh_sales_data')
+
       if (error) throw error
+
+      console.log("Refresh database selesai. Mengambil data terbaru...")
+
+      // 2. Jika sudah selesai tanpa error, baru kita tarik data tabel terbaru
       await fetchAggregatedData()
-      alert('Data berhasil diperbarui!')
+      
+      alert('✅ Sukses! Data berhasil diperbarui dari Master.')
+
     } catch (err: any) {
-      console.error('Refresh DB Error:', err.message)
-      alert('Gagal memperbarui data.')
+      console.error('Refresh DB Error:', err)
+      
+      // Jika error karena Timeout (504) atau Network Error dari Browser (bukan DB)
+      if (err.message?.includes('timeout') || err.status === 504) {
+        alert('⚠️ Waktu Habis (Timeout Browser).\n\nDatabase mungkin masih memproses di latar belakang, tapi koneksi browser terputus karena terlalu lama.\n\nSilakan refresh halaman ini 1-2 menit lagi.')
+      } else {
+        alert('❌ Gagal: ' + (err.message || 'Terjadi kesalahan saat update.'))
+      }
     } finally {
       setIsRefreshing(false)
     }
@@ -445,43 +585,56 @@ export default function PivotPage() {
       <div className="max-w-400 mx-auto space-y-4">
         
         {/* HEADER SECTION */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 z-50 relative">
-          <div className="flex flex-col">
-            <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-                <LayoutGrid className="text-blue-600" size={24} /> 
-                Sales Analytics
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 ml-8">4-Level Dynamic Pivot</p>
-          </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 z-50 relative">
+          
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="flex flex-col">
+                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
+                    <LayoutGrid className="text-blue-600" size={24} /> 
+                    Sales Analytics
+                </h1>
+                <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
+            </div>
 
-          <div className="w-full lg:w-auto flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
-             <div className="flex gap-2 w-full sm:w-auto">
-                <MultiSelect label="Area" options={optionAreas} selected={selectedAreas} onChange={setSelectedAreas} />
-                <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1"></div>
-                <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
-             </div>
-             <div className="flex gap-2 w-full sm:w-auto">
-                <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
-
-                <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm transition-colors grow sm:grow-0 flex justify-center" title="Refresh Tampilan">
+            <div className="flex items-center gap-2">
+                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm transition-colors flex justify-center" title="Refresh Tampilan">
                     <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
                 </button>
-
                 <button 
                     onClick={handleRefreshDatabase} 
-                    disabled={isRefreshing || loading}
-                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all grow sm:grow-0"
+                    disabled={isRefreshing}
+                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all"
                 >
                     <Database size={14} className={isRefreshing ? "animate-pulse" : ""} />
-                    {isRefreshing ? 'Sync' : 'Update'}
+                    {isRefreshing ? 'Updating DB...' : 'Update DB'}
                 </button>
+            </div>
+          </div>
+
+          {/* FILTER BAR - Menggunakan Searchable MultiSelect */}
+          <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
+             {/* Row 1: Time & Location */}
+             <div className="flex flex-wrap gap-2">
+                <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
+                <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
+                
+                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
+                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+             </div>
+
+             {/* Row 2: Product & Customer */}
+             <div className="flex flex-wrap gap-2">
+                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
+                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
+                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
+                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
              </div>
           </div>
+
         </div>
 
         {/* CONTROLS SECTION */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
-           
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
                   <Maximize size={16} />
@@ -490,12 +643,8 @@ export default function PivotPage() {
               <div className="flex items-center gap-3 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
                   <ZoomOut size={14} className="text-slate-400" />
                   <input 
-                    type="range" 
-                    min="0.4" 
-                    max="1.5" 
-                    step="0.1" 
-                    value={zoomLevel} 
-                    onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                    type="range" min="0.4" max="1.5" step="0.1" 
+                    value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
                     className="w-24 md:w-32 cursor-pointer h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"
                   />
                   <ZoomIn size={14} className="text-slate-400" />
@@ -508,7 +657,6 @@ export default function PivotPage() {
                   <Layers size={16} />
                   <span>Hierarki:</span>
                </div>
-               
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                  <ControlBox label="Lvl 1" value={lvl1} onChange={setLvl1} options={DIMENSION_OPTIONS} color="indigo" />
                  <ControlBox label="Lvl 2" value={lvl2} onChange={setLvl2} options={DIMENSION_OPTIONS} color="indigo" />
@@ -526,17 +674,12 @@ export default function PivotPage() {
                 <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-slate-100 flex flex-col items-center gap-2">
                     <RefreshCcw className="animate-spin text-blue-600" size={24} />
                     <span className="text-xs font-semibold text-slate-600">
-                        {isRefreshing ? 'Sedang Memperbarui Database...' : 'Memuat Data...'}
+                        {isRefreshing ? 'Memproses Database (Mohon Tunggu)...' : 'Memuat Data...'}
                     </span>
                 </div>
              </div>
           )}
 
-          {/* SOLUSI ZOOM SAFARI + FULL WIDTH:
-             1. Gunakan fontSize dinamis (bukan style zoom) agar Safari merender text.
-             2. Gunakan min-w-full (bukan w-max) agar tabel minimal selebar layar (tidak mengecil ke kiri).
-             3. Jika zoom besar, tabel akan otomatis overflow karena sifat alami table.
-          */}
           <div className="overflow-auto flex-1 relative w-full">
             <div style={{ fontSize: `${14 * zoomLevel}px` }} className="min-w-full inline-block align-top transition-all duration-200"> 
             
@@ -562,7 +705,6 @@ export default function PivotPage() {
                             <div className="flex items-center justify-center gap-[0.5em]">
                                 {showToggle && (
                                     <button onClick={() => toggleCol(info.parent)} className="hover:text-blue-600 transition focus:outline-none">
-                                        {/* Ikon menggunakan satuan em agar ikut zoom */}
                                         {isExpanded ? 
                                             <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : 
                                             <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />
@@ -625,7 +767,7 @@ export default function PivotPage() {
                    <tr>
                      <td colSpan={20} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
                         <Filter size={24} />
-                        <span>Data tidak ditemukan.</span>
+                        <span>Data tidak ditemukan untuk kombinasi filter ini.</span>
                      </td>
                    </tr>
                 )}
