@@ -7,11 +7,12 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
   LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
   ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
-  Maximize, Search, X, BarChart3, LineChart as LineChartIcon // Icon baru
+  Maximize, Search, X, BarChart3, LineChart as LineChartIcon,
+  Calendar, CalendarRange // <--- ICON BARU
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
-// IMPORT BARU UNTUK CHART
+// IMPORT CHART (SAMA SEPERTI SEBELUMNYA)
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, Cell 
@@ -445,13 +446,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 // SECTION 6: MAIN COMPONENT & STATE
 // ============================================================================
 export default function PivotPage() {
-  const [data, setData] = useState<AggregatedRecord[]>([])           // Data untuk Tabel Pivot (Dinamis)
-  const [chartData, setChartData] = useState<AggregatedRecord[]>([]) // Data untuk Grafik (Stabil)
+  const [data, setData] = useState<AggregatedRecord[]>([])           
+  const [chartData, setChartData] = useState<AggregatedRecord[]>([]) 
   
   const [loading, setLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  // Filter State (Level Hierarchy untuk PIVOT TABLE saja)
+  // Filter State
   const [lvl1, setLvl1] = useState<string>('business_area')
   const [lvl2, setLvl2] = useState<string>('product')
   const [lvl3, setLvl3] = useState<string>('') 
@@ -470,7 +471,7 @@ export default function PivotPage() {
   const [selectedCustGroups, setSelectedCustGroups] = useState<string[]>(['All'])
   const [selectedProducts, setSelectedProducts] = useState<string[]>(['All'])
 
-  // Dynamic Options (Dropdown Content)
+  // Dynamic Options
   const [filterOptions, setFilterOptions] = useState({
     months: [] as string[],
     areas: [] as string[],
@@ -484,12 +485,12 @@ export default function PivotPage() {
   const [optionYears, setOptionYears] = useState<string[]>([])
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  // 1. Logic untuk PIVOT (Menggunakan 'data' yang dinamis sesuai Lvl 1-4)
+  // 1. Logic Pivot
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows })
   
-  // 2. Logic untuk CHART (Menggunakan 'chartData' yang difixed ke Business Area)
-  // Kita hardcode label ke 'Business Area' agar judul grafik konsisten
-  const { trendData, categoryData } = useChartLogic(chartData, 'business_area')
+  // 2. Logic Chart
+  // UBAH DISINI: Ambil 'trendData' (untuk waktu) alih-alih categoryData
+  const { trendData } = useChartLogic(chartData, 'product')
 
 // ============================================================================
 // SECTION 7: DATA FETCHING & EFFECTS
@@ -563,9 +564,10 @@ export default function PivotPage() {
         filter_products: selectedProducts
       })
 
-      // --- FETCH 2: Untuk CHART (Fixed ke 'business_area' agar grafik stabil) ---
+      // --- FETCH 2: Untuk CHART (Fixed ke 'product') ---
+      // UBAH DI SINI: lvl1_field jadi 'product'
       const chartPromise = supabase.rpc('get_sales_analytics', {
-        lvl1_field: 'business_area', // <--- KITA KUNCI DI SINI
+        lvl1_field: 'product', 
         lvl2_field: '', 
         lvl3_field: '', 
         lvl4_field: '', 
@@ -579,7 +581,6 @@ export default function PivotPage() {
         filter_products: selectedProducts
       })
 
-      // Jalankan keduanya bersamaan (Parallel)
       const [pivotRes, chartRes] = await Promise.all([pivotPromise, chartPromise])
 
       if (pivotRes.error) throw pivotRes.error
@@ -664,61 +665,57 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (PINDAH KE SINI - DI ATAS HIERARKI) */}
+        {/* 2. CHARTS SECTION (SINGLE VERTICAL BAR CHART: TIME SERIES) */}
         {!loading && chartData.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 relative z-0">
-                
-                {/* CHART 1: TREND */}
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-72">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-1.5 bg-blue-50 rounded text-blue-600"><LineChartIcon size={16}/></div>
-                        <div>
-                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sales Trend</h3>
-                            <p className="text-[10px] text-slate-400">Performa penjualan per bulan</p>
-                        </div>
-                    </div>
-                    <div className="flex-1 w-full min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="name" tick={{fontSize: 10}} axisLine={false} tickLine={false} tickMargin={10} />
-                                <YAxis tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)+'jt'} tick={{fontSize: 10}} axisLine={false} tickLine={false} width={35} />
-                                <Tooltip content={({ active, payload, label }) => active && payload && payload.length ? <div className="bg-white p-2 border shadow text-xs"><b>{label}</b><br/>Rp {payload[0].value.toLocaleString('id-ID')}</div> : null} />
-                                <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={2} dot={{r: 2}} activeDot={{r: 4}} />
-                            </LineChart>
-                        </ResponsiveContainer>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
+                <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
+                    <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={18}/></div>
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Sales Performance</h3>
+                        <p className="text-[11px] text-slate-400">Total penjualan per Tahun / Bulan (Sesuai Filter)</p>
                     </div>
                 </div>
-
-                {/* CHART 2: TOP KATEGORI (Fixed Business Area) */}
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-72">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={16}/></div>
-                        <div>
-                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Top Business Area</h3>
-                            <p className="text-[10px] text-slate-400">Berdasarkan total penjualan (Top 10)</p>
-                        </div>
-                    </div>
-                    <div className="flex-1 w-full min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                <XAxis type="number" hide />
-                                <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
-                                <Tooltip cursor={{fill: 'transparent'}} content={({ active, payload, label }) => active && payload && payload.length ? <div className="bg-white p-2 border shadow text-xs"><b>{label}</b><br/>Rp {payload[0].value.toLocaleString('id-ID')}</div> : null} />
-                                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                                    {categoryData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={index < 3 ? '#4f46e5' : '#818cf8'} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                <div className="flex-1 w-full min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                        {/* Hapus layout="vertical" agar bar menghadap ke atas */}
+                        <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            {/* XAxis sekarang adalah NAME (Waktu) */}
+                            <XAxis 
+                                dataKey="name" 
+                                tick={{fontSize: 11, fill: '#64748b'}} 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tickMargin={10}
+                            />
+                            {/* YAxis sekarang adalah VALUE (Angka) */}
+                            <YAxis 
+                                tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)+'jt'} 
+                                tick={{fontSize: 10, fill: '#64748b'}} 
+                                axisLine={false} 
+                                tickLine={false} 
+                                width={40} 
+                            />
+                            <Tooltip 
+                                cursor={{fill: '#f8fafc'}} 
+                                content={({ active, payload, label }) => active && payload && payload.length ? (
+                                    <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50">
+                                        <div className="font-bold text-slate-800 mb-1">{label}</div>
+                                        <div className="text-indigo-600 font-mono font-bold bg-indigo-50 px-1.5 py-0.5 rounded w-fit">
+                                            Rp {payload[0].value.toLocaleString('id-ID')}
+                                        </div>
+                                    </div>
+                                ) : null} 
+                            />
+                            {/* Bar menghadap atas */}
+                            <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
         )}
 
-        {/* 3. CONTROLS (HIERARCHY & ZOOM) - PINDAH KE BAWAH CHART */}
+        {/* 3. CONTROLS (HIERARCHY & ZOOM) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            {/* Zoom Control */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
@@ -731,7 +728,7 @@ export default function PivotPage() {
               </div>
            </div>
 
-           {/* Hierarchy Control (Lvl 1 - Lvl 4) */}
+           {/* Hierarchy Control */}
            <div className="w-full flex flex-col md:flex-row items-center gap-3">
                <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0"><Layers size={16} /><span>Hierarki:</span></div>
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
