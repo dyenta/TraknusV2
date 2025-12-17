@@ -77,8 +77,9 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     const isNeutral = percent === 0
     if (current === 0) return <span className="text-[9px] text-slate-300">-</span>
 
+    // Menggunakan em agar badge ikut ter-zoom proporsional
     return (
-        <div className={`flex items-center gap-0.5 text-[0.7em] font-bold px-1.5 py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
+        <div className={`flex items-center gap-[0.2em] text-[0.7em] font-bold px-[0.5em] py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
             {isUp ? <ArrowUp style={{ width: '0.8em', height: '0.8em'}} /> : (!isNeutral && <ArrowDown style={{ width: '0.8em', height: '0.8em'}} />)}
             <span>{Math.abs(percent).toFixed(1)}%</span>
         </div>
@@ -214,7 +215,6 @@ interface UsePivotLogicProps {
 
 export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogicProps) {
   
-  // 1. MEMOIZED PIVOT CALCULATION
   const pivotData = useMemo(() => {
     const uniqueYearsSet = new Set<string>()
     data.forEach(d => uniqueYearsSet.add(String(d.year)))
@@ -309,7 +309,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     }
   }, [data, expandedCols])
 
-  // 2. FLATTEN VISIBLE ROWS
   const visibleRows = useMemo(() => {
     const rows: PivotNode[] = []
     const traverse = (nodes: PivotNode[]) => {
@@ -324,7 +323,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     return rows
   }, [pivotData.roots, expandedRows])
 
-  // 3. HELPER HEADER
   const getHeaderInfo = (colKey: string) => {
       if (colKey.includes('-Total')) return { type: 'subtotal', label: 'TOTAL', parent: colKey.split('-')[0] }
       if (colKey.includes('-')) {
@@ -343,7 +341,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
 // ==========================================
 
 export default function PivotPage() {
-  // --- STATE ---
   const [data, setData] = useState<AggregatedRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
@@ -367,12 +364,10 @@ export default function PivotPage() {
   // ZOOM STATE
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  // --- CUSTOM HOOK LOGIC ---
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({
     data, expandedCols, expandedRows
   })
 
-  // --- EFFECTS ---
   useEffect(() => {
     const fetchFilters = async () => {
       try {
@@ -449,7 +444,7 @@ export default function PivotPage() {
     <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
       <div className="max-w-400 mx-auto space-y-4">
         
-        {/* HEADER SECTION - RESPONSIVE */}
+        {/* HEADER SECTION */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 z-50 relative">
           <div className="flex flex-col">
             <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
@@ -487,7 +482,6 @@ export default function PivotPage() {
         {/* CONTROLS SECTION */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            
-           {/* ZOOM CONTROL FOR MOBILE */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
                   <Maximize size={16} />
@@ -509,7 +503,6 @@ export default function PivotPage() {
               </div>
            </div>
 
-           {/* HIERARCHY CONTROLS */}
            <div className="w-full flex flex-col md:flex-row items-center gap-3">
                <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0">
                   <Layers size={16} />
@@ -539,12 +532,13 @@ export default function PivotPage() {
              </div>
           )}
 
-          {/* PERBAIKAN ZOOM:
-            1. Menggunakan fontSize dinamis (bukan style zoom).
-            2. Menggunakan w-max agar tabel bisa melebar tanpa batas (scroll horizontal).
+          {/* SOLUSI ZOOM SAFARI + FULL WIDTH:
+             1. Gunakan fontSize dinamis (bukan style zoom) agar Safari merender text.
+             2. Gunakan min-w-full (bukan w-max) agar tabel minimal selebar layar (tidak mengecil ke kiri).
+             3. Jika zoom besar, tabel akan otomatis overflow karena sifat alami table.
           */}
           <div className="overflow-auto flex-1 relative w-full">
-            <div style={{ fontSize: `${14 * zoomLevel}px` }} className="w-max origin-top-left transition-all duration-200"> 
+            <div style={{ fontSize: `${14 * zoomLevel}px` }} className="min-w-full inline-block align-top transition-all duration-200"> 
             
             <table className="w-full border-collapse leading-normal">
               <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm text-[inherit]">
@@ -565,10 +559,10 @@ export default function PivotPage() {
                                 ${info.type === 'month' ? 'bg-white font-normal text-[0.9em] text-slate-500' : ''}
                             `}
                         >
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-[0.5em]">
                                 {showToggle && (
                                     <button onClick={() => toggleCol(info.parent)} className="hover:text-blue-600 transition focus:outline-none">
-                                        {/* PERBAIKAN IKON: Menggunakan ukuran relative (em) agar ikut zoom */}
+                                        {/* Ikon menggunakan satuan em agar ikut zoom */}
                                         {isExpanded ? 
                                             <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : 
                                             <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />
@@ -586,10 +580,9 @@ export default function PivotPage() {
                 {visibleRows.length > 0 ? visibleRows.map(node => (
                     <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
                       <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 whitespace-nowrap">
-                        <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 1.5}em` }}>
+                        <div className="flex items-center gap-[0.5em]" style={{ paddingLeft: `${node.level * 1.5}em` }}>
                             {!node.isLeaf ? (
                                 <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
-                                    {/* PERBAIKAN IKON ROW */}
                                     {expandedRows[node.id] ? 
                                         <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : 
                                         <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />
@@ -640,13 +633,12 @@ export default function PivotPage() {
               <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] text-[inherit]">
                 <tr>
                     <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top">
-                        <div className="mt-1">GRAND TOTAL</div>
+                        <div className="mt-[0.2em]">GRAND TOTAL</div>
                     </td>
                     {pivotData.colKeys.map(colKey => {
                         const info = getHeaderInfo(colKey)
                         const currentTotal = pivotData.colTotals[colKey] || 0
                         
-                        // --- LOGIKA YoY GRAND TOTAL ---
                         let prevKey = ''
                         const prevYear = (parseInt(info.parent) - 1).toString()
                         
@@ -659,8 +651,6 @@ export default function PivotPage() {
                         }
 
                         let prevTotal = pivotData.colTotals[prevKey] || 0
-                        
-                        // Fallback subtotal jika belum ada data bulan spesifik di pivot
                         if (info.type === 'subtotal' && prevTotal === 0) {
                             prevTotal = pivotData.colTotals[prevYear] || 0
                         }
@@ -671,7 +661,6 @@ export default function PivotPage() {
                                     <span className="font-mono text-[0.95em]">
                                         {fmt(currentTotal)}
                                     </span>
-                                    {/* TAMPILKAN BADGE YoY JIKA ADA DATA TAHUN LALU */}
                                     {prevTotal > 0 && <YoYBadge current={currentTotal} previous={prevTotal} />}
                                 </div>
                             </td>
