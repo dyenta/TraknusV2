@@ -1,30 +1,25 @@
 'use client'
 
+// ============================================================================
+// SECTION 1: IMPORTS
+// ============================================================================
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
-  LayoutGrid, 
-  RefreshCcw, 
-  Filter, 
-  MinusSquare, 
-  PlusSquare, 
-  Database, 
-  ArrowUp, 
-  ArrowDown, 
-  ChevronDown, 
-  Check,
-  Layers,
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  Search, // Icon baru untuk pencarian
-  X       // Icon baru untuk clear pencarian
+  LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
+  ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
+  Maximize, Search, X, BarChart3, LineChart as LineChartIcon // Icon baru
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
-// ==========================================
-// 1. TYPES
-// ==========================================
+// IMPORT BARU UNTUK CHART
+import { 
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, Cell 
+} from 'recharts'
 
+// ============================================================================
+// SECTION 2: TYPES & INTERFACES
+// ============================================================================
 export interface AggregatedRecord {
   year: number;
   month: number;
@@ -45,10 +40,9 @@ export interface PivotNode {
   children?: PivotNode[]; 
 }
 
-// ==========================================
-// 2. CONSTANTS
-// ==========================================
-
+// ============================================================================
+// SECTION 3: CONSTANTS
+// ============================================================================
 export const DIMENSION_OPTIONS = [
   { label: '(None)', value: '' }, 
   { label: 'Business Area', value: 'business_area' },
@@ -59,6 +53,7 @@ export const DIMENSION_OPTIONS = [
   { label: 'Area', value: 'area' }
 ]
 
+// Kembalikan ke format Label (Nama) & Value (Angka)
 export const MONTH_OPTIONS = [
     { label: 'Jan', value: '1' }, { label: 'Feb', value: '2' }, { label: 'Mar', value: '3' },
     { label: 'Apr', value: '4' }, { label: 'Mei', value: '5' }, { label: 'Jun', value: '6' },
@@ -66,11 +61,12 @@ export const MONTH_OPTIONS = [
     { label: 'Okt', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Des', value: '12' }
 ]
 
-// ==========================================
-// 3. UI COMPONENTS
-// ==========================================
+// ============================================================================
+// SECTION 4: UI SUB-COMPONENTS
+// (YoYBadge, ControlBox, MultiSelect)
+// ============================================================================
 
-// --- YoYBadge Component ---
+// --- 4.1 YoYBadge ---
 export function YoYBadge({ current, previous }: { current: number, previous: number }) {
     if (previous === 0) return null;
     const diff = current - previous
@@ -87,7 +83,7 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     )
 }
 
-// --- ControlBox Component ---
+// --- 4.2 ControlBox ---
 export function ControlBox({ label, value, onChange, options, color }: any) {
     return (
         <div className={`bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 transition-colors`}>
@@ -99,10 +95,10 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- SEARCHABLE MultiSelect Component (FIXED NULL ERROR) ---
+// --- 4.3 MultiSelect (Searchable) ---
 interface MultiSelectProps {
     label: string;
-    options?: (string | null)[]; // Izinkan null
+    options?: (string | null)[];
     optionsRaw?: { label: string, value: string }[];
     selected: string[];
     onChange: (val: string[]) => void;
@@ -113,25 +109,25 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   const [searchTerm, setSearchTerm] = useState("") 
   const dropdownRef = useRef<HTMLDivElement>(null)
   
-  // 1. Normalisasi opsi (Handle Null Value di sini)
+  // Normalisasi opsi (Handle Null Value agar tidak error saat search)
   const finalOptions = useMemo(() => {
     if (optionsRaw) return optionsRaw;
     if (options) {
         return options.map(o => ({ 
-            label: o || "(Empty)", // Ubah null jadi teks "(Empty)"
-            value: o || ""         // Ubah null jadi string kosong untuk value
+            label: o || "(Empty)", 
+            value: o || ""         
         }))
     }
     return []
   }, [options, optionsRaw])
   
-  // 2. LOGIKA FILTERING (PENCARIAN) - AMAN DARI NULL
+  // Logika Pencarian
   const filteredOptions = finalOptions.filter(opt => {
-    // Pastikan label ada sebelum toLowerCase. Jika null/undefined, anggap string kosong.
     const labelText = opt.label || ""; 
     return labelText.toLowerCase().includes(searchTerm.toLowerCase())
   })
   
+  // Klik di luar untuk menutup dropdown
   useEffect(() => {
     function handleClickOutside(event: any) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -152,11 +148,8 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
       let newSelected = [...selected]
       if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
       
-      if (newSelected.includes(val)) {
-          newSelected = newSelected.filter(item => item !== val)
-      } else {
-          newSelected.push(val)
-      }
+      if (newSelected.includes(val)) newSelected = newSelected.filter(item => item !== val)
+      else newSelected.push(val)
       
       if (newSelected.length === finalOptions.length) onChange(['All'])
       else onChange(newSelected)
@@ -185,9 +178,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
           }
           const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
           const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
-          if (startLabel) {
-             ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
-          }
+          if (startLabel) ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
           return ranges.join(', ')
       } 
       
@@ -209,25 +200,22 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
        {isOpen && (
          <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1 flex flex-col">
             
+            {/* Search Input Area */}
             <div className="sticky top-0 bg-white z-20 pb-1 border-b border-slate-100 p-2">
                 <div className="relative flex items-center">
                     <Search size={12} className="absolute left-2 text-slate-400" />
                     <input 
-                        type="text"
-                        placeholder={`Cari ${label}...`}
+                        type="text" placeholder={`Cari ${label}...`}
                         className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:outline-none focus:border-blue-500 transition-colors"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        autoFocus
+                        value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus
                     />
                     {searchTerm && (
-                        <button onClick={() => setSearchTerm("")} className="absolute right-2 text-slate-400 hover:text-slate-600">
-                            <X size={12} />
-                        </button>
+                        <button onClick={() => setSearchTerm("")} className="absolute right-2 text-slate-400 hover:text-slate-600"><X size={12} /></button>
                     )}
                 </div>
             </div>
 
+            {/* List Options */}
             <div className="overflow-y-auto max-h-60 pt-1">
                 {!searchTerm && (
                     <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1">
@@ -237,7 +225,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
                         Select All
                     </div>
                 )}
-
                 {filteredOptions.length > 0 ? (
                     filteredOptions.map(opt => {
                         const isSelected = selected.includes(opt.value) || selected.includes('All')
@@ -246,16 +233,12 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
                                 <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
                                     {isSelected && <Check size={8} className="text-white" />}
                                 </div>
-                                <span className={isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'}>
-                                    {opt.label}
-                                </span>
+                                <span className={isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'}>{opt.label}</span>
                             </div>
                         )
                     })
                 ) : (
-                    <div className="px-3 py-4 text-center text-xs text-slate-400 italic">
-                        Tidak ada hasil "{searchTerm}"
-                    </div>
+                    <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Tidak ada hasil "{searchTerm}"</div>
                 )}
             </div>
          </div>
@@ -264,10 +247,9 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   )
 }
 
-// ==========================================
-// 4. CUSTOM HOOK (PIVOT LOGIC)
-// ==========================================
-
+// ============================================================================
+// SECTION 5: CUSTOM HOOKS (Pivot Logic)
+// ============================================================================
 interface UsePivotLogicProps {
   data: AggregatedRecord[];
   expandedCols: Record<string, boolean>;
@@ -304,20 +286,12 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
       const yearStr = String(item.year)
       const monthStr = item.month < 10 ? `0${item.month}` : String(item.month)
       const val = item.total_amount || 0
-      
       const keysToUpdate = [yearStr, `${yearStr}-${monthStr}`, `${yearStr}-Total`]
 
       grandTotal += val
-      
       for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
 
-      let levels = [
-        item.col_label_1, 
-        item.col_label_2, 
-        item.col_label_3, 
-        item.col_label_4 
-      ]
-      
+      let levels = [item.col_label_1, item.col_label_2, item.col_label_3, item.col_label_4]
       levels = levels.filter(l => l && l !== '-' && l !== 'Others' && l !== '(None)')
       if (levels.length === 0) levels = ['Uncategorized']
 
@@ -330,12 +304,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
         
         if (!currentMap[lvlLabel]) {
             currentMap[lvlLabel] = {
-                id: currentIdPath,
-                label: lvlLabel,
-                level: idx,
-                isLeaf: isLastLevel,
-                values: {}, 
-                rowTotal: 0,
+                id: currentIdPath, label: lvlLabel, level: idx, isLeaf: isLastLevel, values: {}, rowTotal: 0,
             }
         }
         
@@ -362,12 +331,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
             })
     }
 
-    return { 
-        roots: processChildren(rootMap), 
-        colKeys: finalColKeys, 
-        colTotals, 
-        grandTotal
-    }
+    return { roots: processChildren(rootMap), colKeys: finalColKeys, colTotals, grandTotal }
   }, [data, expandedCols])
 
   const visibleRows = useMemo(() => {
@@ -375,9 +339,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     const traverse = (nodes: PivotNode[]) => {
         nodes.forEach(node => {
             rows.push(node)
-            if (node.children && expandedRows[node.id]) {
-                traverse(node.children)
-            }
+            if (node.children && expandedRows[node.id]) traverse(node.children)
         })
     }
     traverse(pivotData.roots)
@@ -386,9 +348,15 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
 
   const getHeaderInfo = (colKey: string) => {
       if (colKey.includes('-Total')) return { type: 'subtotal', label: 'TOTAL', parent: colKey.split('-')[0] }
+      
       if (colKey.includes('-')) {
           const [y, m] = colKey.split('-')
-          const monthLabel = MONTH_OPTIONS.find(o => o.value === String(parseInt(m)))?.label || m
+          
+          // PERUBAHAN DI SINI:
+          // Sebelumnya: Mengambil nama dari MONTH_OPTIONS
+          // Sekarang: Langsung ambil angka bulannya saja (parseInt agar '01' jadi '1')
+          const monthLabel = String(parseInt(m)) 
+          
           return { type: 'month', label: monthLabel, parent: y }
       }
       return { type: 'year', label: colKey, parent: colKey }
@@ -397,16 +365,93 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
   return { pivotData, visibleRows, getHeaderInfo }
 }
 
-// ==========================================
-// 5. MAIN PAGE COMPONENT
-// ==========================================
+// ============================================================================
+// SECTION 5.5: CUSTOM HOOKS (Chart Logic)
+// ============================================================================
+export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
+  return useMemo(() => {
+    // 1. DATA UNTUK TREND (Line Chart)
+    // Mengelompokkan data berdasarkan Tahun-Bulan
+    const trendMap: Record<string, any> = {}
+    
+    data.forEach(item => {
+      // Format Key: "2024-1", "2024-2"
+      const key = `${item.year}-${item.month}`
+      // Label Tampilan: "Jan 24", "Feb 24"
+      const monthNames = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+      const label = `${monthNames[item.month]} ${String(item.year).slice(-2)}`
+      
+      if (!trendMap[key]) {
+        trendMap[key] = { 
+            name: label, 
+            year: item.year, 
+            month: item.month, 
+            total: 0 
+        }
+      }
+      trendMap[key].total += item.total_amount
+    })
 
+    // Sorting berdasarkan waktu (Tahun lalu Bulan)
+    const trendData = Object.values(trendMap).sort((a: any, b: any) => {
+        if (a.year !== b.year) return a.year - b.year
+        return a.month - b.month
+    })
+
+    // 2. DATA UNTUK KATEGORI (Bar Chart)
+    // Mengelompokkan data berdasarkan Level 1 yang dipilih user
+    const catMap: Record<string, number> = {}
+    data.forEach(item => {
+        const label = item.col_label_1 || 'Uncategorized'
+        catMap[label] = (catMap[label] || 0) + item.total_amount
+    })
+
+    const categoryData = Object.keys(catMap).map(key => ({
+        name: key,
+        value: catMap[key]
+    })).sort((a, b) => b.value - a.value) // Sort dari terbesar ke terkecil
+
+    // Ambil Top 10 saja agar grafik tidak penuh sesak
+    const topCategoryData = categoryData.slice(0, 10)
+
+    return { trendData, categoryData: topCategoryData }
+  }, [data])
+}
+
+// Format Uang Singkat (K = Ribu, M = Juta, B = Miliar)
+const formatMoneyShort = (value: number) => {
+    if (value >= 1000000000) return (value / 1000000000).toFixed(1) + 'M' // Miliar
+    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'jt' // Juta
+    if (value >= 1000) return (value / 1000).toFixed(0) + 'rb' // Ribu
+    return value.toString()
+}
+
+// Komponen Tooltip Custom agar terlihat bagus
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-slate-200 shadow-lg rounded text-xs">
+          <p className="font-bold text-slate-700 mb-1">{label}</p>
+          <p className="text-blue-600 font-mono">
+            Rp {payload[0].value.toLocaleString('id-ID')}
+          </p>
+        </div>
+      )
+    }
+    return null
+}
+
+// ============================================================================
+// SECTION 6: MAIN COMPONENT & STATE
+// ============================================================================
 export default function PivotPage() {
-  const [data, setData] = useState<AggregatedRecord[]>([])
+  const [data, setData] = useState<AggregatedRecord[]>([])           // Data untuk Tabel Pivot (Dinamis)
+  const [chartData, setChartData] = useState<AggregatedRecord[]>([]) // Data untuk Grafik (Stabil)
+  
   const [loading, setLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  // FILTER STATE - SELECTIONS
+  // Filter State (Level Hierarchy untuk PIVOT TABLE saja)
   const [lvl1, setLvl1] = useState<string>('business_area')
   const [lvl2, setLvl2] = useState<string>('product')
   const [lvl3, setLvl3] = useState<string>('') 
@@ -415,7 +460,7 @@ export default function PivotPage() {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
 
-  // Selected Values
+  // Selected Filter Values
   const [selectedYears, setSelectedYears] = useState<string[]>(['All'])
   const [selectedMonths, setSelectedMonths] = useState<string[]>(['All']) 
   const [selectedAreas, setSelectedAreas] = useState<string[]>(['All'])
@@ -425,8 +470,9 @@ export default function PivotPage() {
   const [selectedCustGroups, setSelectedCustGroups] = useState<string[]>(['All'])
   const [selectedProducts, setSelectedProducts] = useState<string[]>(['All'])
 
-  // DYNAMIC OPTION STATE (Unified)
+  // Dynamic Options (Dropdown Content)
   const [filterOptions, setFilterOptions] = useState({
+    months: [] as string[],
     areas: [] as string[],
     business_areas: [] as string[],
     pss: [] as string[],
@@ -435,17 +481,21 @@ export default function PivotPage() {
     cust_groups: [] as string[],
   })
   
-  // Static/Cached Options (Years usually don't change dynamically based on product)
   const [optionYears, setOptionYears] = useState<string[]>([])
-
-  // ZOOM STATE
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({
-    data, expandedCols, expandedRows
-  })
+  // 1. Logic untuk PIVOT (Menggunakan 'data' yang dinamis sesuai Lvl 1-4)
+  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows })
+  
+  // 2. Logic untuk CHART (Menggunakan 'chartData' yang difixed ke Business Area)
+  // Kita hardcode label ke 'Business Area' agar judul grafik konsisten
+  const { trendData, categoryData } = useChartLogic(chartData, 'business_area')
 
-  // --- 1. FETCH INITIAL YEARS (Static) ---
+// ============================================================================
+// SECTION 7: DATA FETCHING & EFFECTS
+// ============================================================================
+  
+  // 7.1 Fetch Initial Years (Static)
   useEffect(() => {
     const fetchYears = async () => {
        const { data } = await supabase.from('filter_cache').select('value').eq('type', 'year')
@@ -454,8 +504,7 @@ export default function PivotPage() {
     fetchYears()
   }, [])
 
-  // --- 2. FETCH DYNAMIC FILTERS ---
-  // Logika Cascading: Pilihan di satu filter mengubah opsi filter lain
+  // 7.2 Fetch Dynamic Filters & Main Data
   useEffect(() => {
     const fetchDynamicOptions = async () => {
       try {
@@ -473,9 +522,9 @@ export default function PivotPage() {
         })
 
         if (error) throw error
-        
         if (data) {
            setFilterOptions({
+             months: data.month || [],
              areas: data.area || [],
              business_areas: data.business_area || [],
              pss: data.pss || [],
@@ -484,42 +533,26 @@ export default function PivotPage() {
              cust_groups: data.cust_group || [],
            })
         }
-      } catch (err) {
-        console.error("Dynamic Filter Error:", err)
-      }
+      } catch (err) { console.error("Dynamic Filter Error:", err) }
     }
 
     fetchDynamicOptions()
-    
-    // Refresh data tabel/chart juga
     fetchAggregatedData()
-
   }, [
-    selectedYears, selectedMonths, selectedAreas,
-    selectedBusinessAreas, selectedPSS, selectedKAT, 
-    selectedCustGroups, selectedProducts
+    selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas, 
+    selectedPSS, selectedKAT, selectedCustGroups, selectedProducts
   ]) 
 
-  // Reset Row Expand saat level berubah
-  useEffect(() => {
-    setExpandedRows({})
-  }, [lvl1, lvl2, lvl3, lvl4])
-
-
-  // --- 3. FETCH DATA TABLE ---
+  // 7.3 Fetch Table & Chart Data Function (DUAL FETCH)
   const fetchAggregatedData = async () => {
     setLoading(true)
     try {
       let monthInts: number[] = []
-      if (!selectedMonths.includes('All')) {
-        monthInts = selectedMonths.map(m => parseInt(m))
-      }
+      if (!selectedMonths.includes('All')) monthInts = selectedMonths.map(m => parseInt(m))
 
-      const { data: rpcData, error } = await supabase.rpc('get_sales_analytics', {
-        lvl1_field: lvl1,
-        lvl2_field: lvl2,
-        lvl3_field: lvl3,
-        lvl4_field: lvl4, 
+      // --- FETCH 1: Untuk PIVOT TABLE (Dinamis ikut Lvl 1 user) ---
+      const pivotPromise = supabase.rpc('get_sales_analytics', {
+        lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, 
         filter_years: selectedYears,
         filter_areas: selectedAreas,
         filter_months: monthInts,
@@ -530,44 +563,57 @@ export default function PivotPage() {
         filter_products: selectedProducts
       })
 
-      if (error) throw error
-      if (rpcData) setData(rpcData as AggregatedRecord[])
+      // --- FETCH 2: Untuk CHART (Fixed ke 'business_area' agar grafik stabil) ---
+      const chartPromise = supabase.rpc('get_sales_analytics', {
+        lvl1_field: 'business_area', // <--- KITA KUNCI DI SINI
+        lvl2_field: '', 
+        lvl3_field: '', 
+        lvl4_field: '', 
+        filter_years: selectedYears,
+        filter_areas: selectedAreas,
+        filter_months: monthInts,
+        filter_business_areas: selectedBusinessAreas,
+        filter_pss: selectedPSS,
+        filter_key_account_types: selectedKAT,
+        filter_cust_groups: selectedCustGroups,
+        filter_products: selectedProducts
+      })
+
+      // Jalankan keduanya bersamaan (Parallel)
+      const [pivotRes, chartRes] = await Promise.all([pivotPromise, chartPromise])
+
+      if (pivotRes.error) throw pivotRes.error
+      if (chartRes.error) throw chartRes.error
+
+      if (pivotRes.data) setData(pivotRes.data as AggregatedRecord[])
+      if (chartRes.data) setChartData(chartRes.data as AggregatedRecord[])
       
-    } catch (err: any) {
-      console.error('Data Error:', err.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err: any) { console.error('Data Error:', err.message) } 
+    finally { setLoading(false) }
   }
 
-  // --- 4. HANDLE REFRESH DB (WAIT/LOADING VERSION) ---
+  // Reset Row Expand when level changes
+  useEffect(() => { setExpandedRows({}) }, [lvl1, lvl2, lvl3, lvl4])
+
+// ============================================================================
+// SECTION 8: EVENT HANDLERS
+// ============================================================================
+
   const handleRefreshDatabase = async () => {
-    // Peringatan ke user karena proses ini bisa lama
     if(!confirm("Update Data dari Master? \n\nPERINGATAN: Proses ini mungkin memakan waktu lama (30-60+ detik).\nMohon jangan tutup browser sampai selesai.")) return;
-    
     setIsRefreshing(true)
     console.log("Memulai refresh database...")
 
     try {
-      // 1. Panggil RPC dan TUNGGU (await) sampai benar-benar selesai
-      // Tidak ada "fake timeout", kita biarkan browser menunggu respons server
       const { error } = await supabase.rpc('refresh_sales_data')
-
       if (error) throw error
-
       console.log("Refresh database selesai. Mengambil data terbaru...")
-
-      // 2. Jika sudah selesai tanpa error, baru kita tarik data tabel terbaru
       await fetchAggregatedData()
-      
       alert('✅ Sukses! Data berhasil diperbarui dari Master.')
-
     } catch (err: any) {
       console.error('Refresh DB Error:', err)
-      
-      // Jika error karena Timeout (504) atau Network Error dari Browser (bukan DB)
       if (err.message?.includes('timeout') || err.status === 504) {
-        alert('⚠️ Waktu Habis (Timeout Browser).\n\nDatabase mungkin masih memproses di latar belakang, tapi koneksi browser terputus karena terlalu lama.\n\nSilakan refresh halaman ini 1-2 menit lagi.')
+        alert('⚠️ Waktu Habis (Timeout Browser).\n\nDatabase mungkin masih memproses di latar belakang.')
       } else {
         alert('❌ Gagal: ' + (err.message || 'Terjadi kesalahan saat update.'))
       }
@@ -580,49 +626,35 @@ export default function PivotPage() {
   const toggleCol = (year: string) => setExpandedCols(prev => ({ ...prev, [year]: !prev[year] }))
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
 
+// ============================================================================
+// SECTION 9: JSX RENDER
+// ============================================================================
   return (
     <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
       <div className="max-w-400 mx-auto space-y-4">
         
-        {/* HEADER SECTION */}
+        {/* 1. HEADER & FILTERS */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 z-50 relative">
-          
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div className="flex flex-col">
-                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-                    <LayoutGrid className="text-blue-600" size={24} /> 
-                    Sales Analytics
-                </h1>
+                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800"><LayoutGrid className="text-blue-600" size={24} /> Sales Analytics</h1>
                 <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
             </div>
-
             <div className="flex items-center gap-2">
-                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm transition-colors flex justify-center" title="Refresh Tampilan">
-                    <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
-                </button>
-                <button 
-                    onClick={handleRefreshDatabase} 
-                    disabled={isRefreshing}
-                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all"
-                >
-                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} />
-                    {isRefreshing ? 'Updating DB...' : 'Update DB'}
+                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm flex justify-center"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button>
+                <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} /> {isRefreshing ? 'Updating DB...' : 'Update DB'}
                 </button>
             </div>
           </div>
 
-          {/* FILTER BAR - Menggunakan Searchable MultiSelect */}
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
-             {/* Row 1: Time & Location */}
              <div className="flex flex-wrap gap-2">
                 <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
                 <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
-                
                 <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
                 <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
              </div>
-
-             {/* Row 2: Product & Customer */}
              <div className="flex flex-wrap gap-2">
                 <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
                 <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
@@ -630,33 +662,78 @@ export default function PivotPage() {
                 <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
              </div>
           </div>
-
         </div>
 
-        {/* CONTROLS SECTION */}
+        {/* 2. CHARTS SECTION (PINDAH KE SINI - DI ATAS HIERARKI) */}
+        {!loading && chartData.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 relative z-0">
+                
+                {/* CHART 1: TREND */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-72">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="p-1.5 bg-blue-50 rounded text-blue-600"><LineChartIcon size={16}/></div>
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sales Trend</h3>
+                            <p className="text-[10px] text-slate-400">Performa penjualan per bulan</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 w-full min-h-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" tick={{fontSize: 10}} axisLine={false} tickLine={false} tickMargin={10} />
+                                <YAxis tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)+'jt'} tick={{fontSize: 10}} axisLine={false} tickLine={false} width={35} />
+                                <Tooltip content={({ active, payload, label }) => active && payload && payload.length ? <div className="bg-white p-2 border shadow text-xs"><b>{label}</b><br/>Rp {payload[0].value.toLocaleString('id-ID')}</div> : null} />
+                                <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={2} dot={{r: 2}} activeDot={{r: 4}} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* CHART 2: TOP KATEGORI (Fixed Business Area) */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-72">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={16}/></div>
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Top Business Area</h3>
+                            <p className="text-[10px] text-slate-400">Berdasarkan total penjualan (Top 10)</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 w-full min-h-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{fill: 'transparent'}} content={({ active, payload, label }) => active && payload && payload.length ? <div className="bg-white p-2 border shadow text-xs"><b>{label}</b><br/>Rp {payload[0].value.toLocaleString('id-ID')}</div> : null} />
+                                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                    {categoryData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={index < 3 ? '#4f46e5' : '#818cf8'} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 3. CONTROLS (HIERARCHY & ZOOM) - PINDAH KE BAWAH CHART */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
+           {/* Zoom Control */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
-              <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <Maximize size={16} />
-                  <span>Zoom View</span>
-              </div>
+              <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider"><Maximize size={16} /><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
                   <ZoomOut size={14} className="text-slate-400" />
-                  <input 
-                    type="range" min="0.4" max="1.5" step="0.1" 
-                    value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
-                    className="w-24 md:w-32 cursor-pointer h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"
-                  />
+                  <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))} className="w-24 md:w-32 cursor-pointer h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"/>
                   <ZoomIn size={14} className="text-slate-400" />
                   <span className="text-[10px] font-mono text-slate-500 w-8 text-right">{(zoomLevel * 100).toFixed(0)}%</span>
               </div>
            </div>
 
+           {/* Hierarchy Control (Lvl 1 - Lvl 4) */}
            <div className="w-full flex flex-col md:flex-row items-center gap-3">
-               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0">
-                  <Layers size={16} />
-                  <span>Hierarki:</span>
-               </div>
+               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0"><Layers size={16} /><span>Hierarki:</span></div>
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                  <ControlBox label="Lvl 1" value={lvl1} onChange={setLvl1} options={DIMENSION_OPTIONS} color="indigo" />
                  <ControlBox label="Lvl 2" value={lvl2} onChange={setLvl2} options={DIMENSION_OPTIONS} color="indigo" />
@@ -666,49 +743,33 @@ export default function PivotPage() {
            </div>
         </div>
 
-        {/* TABLE CONTAINER */}
+        {/* 4. TABLE DISPLAY */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0">
-          
           {(loading || isRefreshing) && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
                 <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-slate-100 flex flex-col items-center gap-2">
                     <RefreshCcw className="animate-spin text-blue-600" size={24} />
-                    <span className="text-xs font-semibold text-slate-600">
-                        {isRefreshing ? 'Memproses Database (Mohon Tunggu)...' : 'Memuat Data...'}
-                    </span>
+                    <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
                 </div>
              </div>
           )}
 
           <div className="overflow-auto flex-1 relative w-full">
             <div style={{ fontSize: `${14 * zoomLevel}px` }} className="min-w-full inline-block align-top transition-all duration-200"> 
-            
             <table className="w-full border-collapse leading-normal">
               <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm text-[inherit]">
                 <tr>
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-[8em]">
-                     HIERARKI
-                  </th>
+                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
                   {pivotData.colKeys.map(colKey => {
                     const info = getHeaderInfo(colKey)
                     const isExpanded = expandedCols[info.parent]
                     const showToggle = info.type === 'year' || info.type === 'subtotal'
                     return (
-                        <th key={colKey} 
-                            className={`
-                                p-2 text-center font-bold border-b border-slate-300 whitespace-nowrap min-w-[6em]
-                                ${info.type === 'year' ? 'bg-slate-100' : ''}
-                                ${info.type === 'subtotal' ? 'bg-slate-200 border-l border-slate-300' : ''}
-                                ${info.type === 'month' ? 'bg-white font-normal text-[0.9em] text-slate-500' : ''}
-                            `}
-                        >
+                        <th key={colKey} className={`p-2 text-center font-bold border-b border-slate-300 whitespace-nowrap min-w-[6em] ${info.type === 'year' ? 'bg-slate-100' : ''} ${info.type === 'subtotal' ? 'bg-slate-200 border-l border-slate-300' : ''} ${info.type === 'month' ? 'bg-white font-normal text-[0.9em] text-slate-500' : ''}`}>
                             <div className="flex items-center justify-center gap-[0.5em]">
                                 {showToggle && (
                                     <button onClick={() => toggleCol(info.parent)} className="hover:text-blue-600 transition focus:outline-none">
-                                        {isExpanded ? 
-                                            <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : 
-                                            <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />
-                                        }
+                                        {isExpanded ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />}
                                     </button>
                                 )}
                                 <span>{info.label}</span>
@@ -725,16 +786,10 @@ export default function PivotPage() {
                         <div className="flex items-center gap-[0.5em]" style={{ paddingLeft: `${node.level * 1.5}em` }}>
                             {!node.isLeaf ? (
                                 <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
-                                    {expandedRows[node.id] ? 
-                                        <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : 
-                                        <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />
-                                    }
+                                    {expandedRows[node.id] ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />}
                                 </button>
                             ) : <span style={{ width: '1.2em' }} />}
-                            
-                            <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>
-                                {node.label}
-                            </span>
+                            <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>{node.label}</span>
                         </div>
                       </td>
                       {pivotData.colKeys.map(colKey => {
@@ -754,9 +809,7 @@ export default function PivotPage() {
                          return (
                             <td key={colKey} className={`p-2 text-right border-r border-slate-100 align-top cursor-default whitespace-nowrap ${isSubtotal ? 'bg-slate-50 font-bold border-l border-slate-200' : ''}`}>
                                 <div className="flex flex-col items-end gap-0.5">
-                                    <span className={`font-mono text-[0.95em] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>
-                                        {fmt(currentVal)}
-                                    </span>
+                                    <span className={`font-mono text-[0.95em] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>{fmt(currentVal)}</span>
                                     {prevVal > 0 && <YoYBadge current={currentVal} previous={prevVal} />}
                                 </div>
                             </td>
@@ -764,45 +817,28 @@ export default function PivotPage() {
                       })}
                     </tr>
                 )) : (
-                   <tr>
-                     <td colSpan={20} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                        <Filter size={24} />
-                        <span>Data tidak ditemukan untuk kombinasi filter ini.</span>
-                     </td>
-                   </tr>
+                   <tr><td colSpan={20} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2"><Filter size={24} /><span>Data tidak ditemukan untuk kombinasi filter ini.</span></td></tr>
                 )}
               </tbody>
               <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] text-[inherit]">
                 <tr>
-                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top">
-                        <div className="mt-[0.2em]">GRAND TOTAL</div>
-                    </td>
+                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top"><div className="mt-[0.2em]">GRAND TOTAL</div></td>
                     {pivotData.colKeys.map(colKey => {
                         const info = getHeaderInfo(colKey)
                         const currentTotal = pivotData.colTotals[colKey] || 0
-                        
                         let prevKey = ''
                         const prevYear = (parseInt(info.parent) - 1).toString()
-                        
-                        if (info.type === 'year') {
-                            prevKey = prevYear
-                        } else if (info.type === 'month') {
-                            prevKey = `${prevYear}-${colKey.split('-')[1]}`
-                        } else if (info.type === 'subtotal') {
-                            prevKey = `${prevYear}-Total`
-                        }
+                        if (info.type === 'year') prevKey = prevYear
+                        else if (info.type === 'month') prevKey = `${prevYear}-${colKey.split('-')[1]}`
+                        else if (info.type === 'subtotal') prevKey = `${prevYear}-Total`
 
                         let prevTotal = pivotData.colTotals[prevKey] || 0
-                        if (info.type === 'subtotal' && prevTotal === 0) {
-                            prevTotal = pivotData.colTotals[prevYear] || 0
-                        }
+                        if (info.type === 'subtotal' && prevTotal === 0) prevTotal = pivotData.colTotals[prevYear] || 0
 
                         return (
                             <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 align-top whitespace-nowrap ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
                                 <div className="flex flex-col items-end gap-0.5">
-                                    <span className="font-mono text-[0.95em]">
-                                        {fmt(currentTotal)}
-                                    </span>
+                                    <span className="font-mono text-[0.95em]">{fmt(currentTotal)}</span>
                                     {prevTotal > 0 && <YoYBadge current={currentTotal} previous={prevTotal} />}
                                 </div>
                             </td>
@@ -811,7 +847,6 @@ export default function PivotPage() {
                 </tr>
               </tfoot>
             </table>
-            
             </div>
           </div>
         </div>
