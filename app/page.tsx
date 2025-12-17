@@ -78,8 +78,8 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     if (current === 0) return <span className="text-[9px] text-slate-300">-</span>
 
     return (
-        <div className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
-            {isUp ? <ArrowUp size={8} /> : (!isNeutral && <ArrowDown size={8} />)}
+        <div className={`flex items-center gap-0.5 text-[0.7em] font-bold px-1.5 py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
+            {isUp ? <ArrowUp style={{ width: '0.8em', height: '0.8em'}} /> : (!isNeutral && <ArrowDown style={{ width: '0.8em', height: '0.8em'}} />)}
             <span>{Math.abs(percent).toFixed(1)}%</span>
         </div>
     )
@@ -539,15 +539,17 @@ export default function PivotPage() {
              </div>
           )}
 
-          {/* WRAPPER DENGAN STYLE ZOOM */}
+          {/* PERBAIKAN ZOOM:
+            1. Menggunakan fontSize dinamis (bukan style zoom).
+            2. Menggunakan w-max agar tabel bisa melebar tanpa batas (scroll horizontal).
+          */}
           <div className="overflow-auto flex-1 relative w-full">
-            <div style={{ zoom: zoomLevel } as any} className="w-max origin-top-left"> 
+            <div style={{ fontSize: `${14 * zoomLevel}px` }} className="w-max origin-top-left transition-all duration-200"> 
             
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm">
+            <table className="w-full border-collapse leading-normal">
+              <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm text-[inherit]">
                 <tr>
-                  {/* [UPDATED] SIZING FIXED REMOVED, ADDED WHITESPACE-NOWRAP */}
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-30">
+                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-[8em]">
                      HIERARKI
                   </th>
                   {pivotData.colKeys.map(colKey => {
@@ -557,16 +559,20 @@ export default function PivotPage() {
                     return (
                         <th key={colKey} 
                             className={`
-                                p-2 text-center font-bold border-b border-slate-300 min-w-25
+                                p-2 text-center font-bold border-b border-slate-300 whitespace-nowrap min-w-[6em]
                                 ${info.type === 'year' ? 'bg-slate-100' : ''}
                                 ${info.type === 'subtotal' ? 'bg-slate-200 border-l border-slate-300' : ''}
-                                ${info.type === 'month' ? 'bg-white font-normal text-xs text-slate-500' : ''}
+                                ${info.type === 'month' ? 'bg-white font-normal text-[0.9em] text-slate-500' : ''}
                             `}
                         >
                             <div className="flex items-center justify-center gap-2">
                                 {showToggle && (
                                     <button onClick={() => toggleCol(info.parent)} className="hover:text-blue-600 transition focus:outline-none">
-                                        {isExpanded ? <MinusSquare size={14} className="text-red-500" /> : <PlusSquare size={14} className="text-blue-600" />}
+                                        {/* PERBAIKAN IKON: Menggunakan ukuran relative (em) agar ikut zoom */}
+                                        {isExpanded ? 
+                                            <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : 
+                                            <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />
+                                        }
                                     </button>
                                 )}
                                 <span>{info.label}</span>
@@ -576,18 +582,21 @@ export default function PivotPage() {
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-600">
+              <tbody className="divide-y divide-slate-100 text-slate-600 text-[inherit]">
                 {visibleRows.length > 0 ? visibleRows.map(node => (
                     <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
                       <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 whitespace-nowrap">
-                        <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 20}px` }}>
+                        <div className="flex items-center gap-2" style={{ paddingLeft: `${node.level * 1.5}em` }}>
                             {!node.isLeaf ? (
                                 <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
-                                    {expandedRows[node.id] ? <MinusSquare size={16} /> : <PlusSquare size={16} />}
+                                    {/* PERBAIKAN IKON ROW */}
+                                    {expandedRows[node.id] ? 
+                                        <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : 
+                                        <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />
+                                    }
                                 </button>
-                            ) : <span className="w-4 h-4" />}
+                            ) : <span style={{ width: '1.2em' }} />}
                             
-                            {/* [UPDATED] HAPUS TRUNCATE & MAX-W AGAR PAS KONTEN */}
                             <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>
                                 {node.label}
                             </span>
@@ -610,7 +619,7 @@ export default function PivotPage() {
                          return (
                             <td key={colKey} className={`p-2 text-right border-r border-slate-100 align-top cursor-default whitespace-nowrap ${isSubtotal ? 'bg-slate-50 font-bold border-l border-slate-200' : ''}`}>
                                 <div className="flex flex-col items-end gap-0.5">
-                                    <span className={`font-mono text-[13px] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>
+                                    <span className={`font-mono text-[0.95em] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>
                                         {fmt(currentVal)}
                                     </span>
                                     {prevVal > 0 && <YoYBadge current={currentVal} previous={prevVal} />}
@@ -628,16 +637,16 @@ export default function PivotPage() {
                    </tr>
                 )}
               </tbody>
-              <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] text-[inherit]">
                 <tr>
                     <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top">
-                        <div className="mt-0.5">GRAND TOTAL</div>
+                        <div className="mt-1">GRAND TOTAL</div>
                     </td>
                     {pivotData.colKeys.map(colKey => {
                         const info = getHeaderInfo(colKey)
                         const currentTotal = pivotData.colTotals[colKey] || 0
                         
-                        // --- LOGIKA MENCARI TOTAL TAHUN SEBELUMNYA (Sama seperti body) ---
+                        // --- LOGIKA YoY GRAND TOTAL ---
                         let prevKey = ''
                         const prevYear = (parseInt(info.parent) - 1).toString()
                         
@@ -651,20 +660,19 @@ export default function PivotPage() {
 
                         let prevTotal = pivotData.colTotals[prevKey] || 0
                         
-                        // Fallback khusus subtotal jika key spesifik tidak ketemu, ambil total tahunnya
+                        // Fallback subtotal jika belum ada data bulan spesifik di pivot
                         if (info.type === 'subtotal' && prevTotal === 0) {
                             prevTotal = pivotData.colTotals[prevYear] || 0
                         }
-                        // ------------------------------------------------------------------
 
                         return (
-                            <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 align-top ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
+                            <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 align-top whitespace-nowrap ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
                                 <div className="flex flex-col items-end gap-0.5">
-                                    <span className="font-mono text-sm">
+                                    <span className="font-mono text-[0.95em]">
                                         {fmt(currentTotal)}
                                     </span>
-                                    {/* Render Badge YoY untuk Grand Total */}
-                                    <YoYBadge current={currentTotal} previous={prevTotal} />
+                                    {/* TAMPILKAN BADGE YoY JIKA ADA DATA TAHUN LALU */}
+                                    {prevTotal > 0 && <YoYBadge current={currentTotal} previous={prevTotal} />}
                                 </div>
                             </td>
                         )
