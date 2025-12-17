@@ -541,7 +541,7 @@ export default function PivotPage() {
 
           {/* WRAPPER DENGAN STYLE ZOOM */}
           <div className="overflow-auto flex-1 relative w-full">
-            <div style={{ zoom: zoomLevel } as any} className="min-w-fit origin-top-left"> 
+            <div style={{ zoom: zoomLevel } as any} className="w-max origin-top-left"> 
             
             <table className="w-full text-sm border-collapse">
               <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm">
@@ -608,7 +608,7 @@ export default function PivotPage() {
                          if (info.type === 'subtotal' && prevVal === 0) prevVal = node.values[prevYear] || 0
 
                          return (
-                            <td key={colKey} className={`p-2 text-right border-r border-slate-100 align-top cursor-default ${isSubtotal ? 'bg-slate-50 font-bold border-l border-slate-200' : ''}`}>
+                            <td key={colKey} className={`p-2 text-right border-r border-slate-100 align-top cursor-default whitespace-nowrap ${isSubtotal ? 'bg-slate-50 font-bold border-l border-slate-200' : ''}`}>
                                 <div className="flex flex-col items-end gap-0.5">
                                     <span className={`font-mono text-[13px] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>
                                         {fmt(currentVal)}
@@ -630,12 +630,42 @@ export default function PivotPage() {
               </tbody>
               <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                 <tr>
-                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap">GRAND TOTAL</td>
+                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top">
+                        <div className="mt-0.5">GRAND TOTAL</div>
+                    </td>
                     {pivotData.colKeys.map(colKey => {
                         const info = getHeaderInfo(colKey)
+                        const currentTotal = pivotData.colTotals[colKey] || 0
+                        
+                        // --- LOGIKA MENCARI TOTAL TAHUN SEBELUMNYA (Sama seperti body) ---
+                        let prevKey = ''
+                        const prevYear = (parseInt(info.parent) - 1).toString()
+                        
+                        if (info.type === 'year') {
+                            prevKey = prevYear
+                        } else if (info.type === 'month') {
+                            prevKey = `${prevYear}-${colKey.split('-')[1]}`
+                        } else if (info.type === 'subtotal') {
+                            prevKey = `${prevYear}-Total`
+                        }
+
+                        let prevTotal = pivotData.colTotals[prevKey] || 0
+                        
+                        // Fallback khusus subtotal jika key spesifik tidak ketemu, ambil total tahunnya
+                        if (info.type === 'subtotal' && prevTotal === 0) {
+                            prevTotal = pivotData.colTotals[prevYear] || 0
+                        }
+                        // ------------------------------------------------------------------
+
                         return (
-                            <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 font-mono text-sm ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
-                                {fmt(pivotData.colTotals[colKey])}
+                            <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 align-top ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
+                                <div className="flex flex-col items-end gap-0.5">
+                                    <span className="font-mono text-sm">
+                                        {fmt(currentTotal)}
+                                    </span>
+                                    {/* Render Badge YoY untuk Grand Total */}
+                                    <YoYBadge current={currentTotal} previous={prevTotal} />
+                                </div>
                             </td>
                         )
                     })}
