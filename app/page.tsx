@@ -8,11 +8,10 @@ import {
   LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
   ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
   Maximize, Search, X, BarChart3, LineChart as LineChartIcon,
-  Calendar, CalendarRange // <--- ICON BARU
+  Calendar, CalendarRange 
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
-// IMPORT CHART (SAMA SEPERTI SEBELUMNYA)
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, Cell 
@@ -54,7 +53,6 @@ export const DIMENSION_OPTIONS = [
   { label: 'Area', value: 'area' }
 ]
 
-// Kembalikan ke format Label (Nama) & Value (Angka)
 export const MONTH_OPTIONS = [
     { label: 'Jan', value: '1' }, { label: 'Feb', value: '2' }, { label: 'Mar', value: '3' },
     { label: 'Apr', value: '4' }, { label: 'Mei', value: '5' }, { label: 'Jun', value: '6' },
@@ -110,7 +108,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   const [searchTerm, setSearchTerm] = useState("") 
   const dropdownRef = useRef<HTMLDivElement>(null)
   
-  // Normalisasi opsi (Handle Null Value agar tidak error saat search)
   const finalOptions = useMemo(() => {
     if (optionsRaw) return optionsRaw;
     if (options) {
@@ -122,13 +119,11 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
     return []
   }, [options, optionsRaw])
   
-  // Logika Pencarian
   const filteredOptions = finalOptions.filter(opt => {
     const labelText = opt.label || ""; 
     return labelText.toLowerCase().includes(searchTerm.toLowerCase())
   })
   
-  // Klik di luar untuk menutup dropdown
   useEffect(() => {
     function handleClickOutside(event: any) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -200,8 +195,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
        
        {isOpen && (
          <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1 flex flex-col">
-            
-            {/* Search Input Area */}
             <div className="sticky top-0 bg-white z-20 pb-1 border-b border-slate-100 p-2">
                 <div className="relative flex items-center">
                     <Search size={12} className="absolute left-2 text-slate-400" />
@@ -216,7 +209,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
                 </div>
             </div>
 
-            {/* List Options */}
             <div className="overflow-y-auto max-h-60 pt-1">
                 {!searchTerm && (
                     <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1">
@@ -249,7 +241,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
 }
 
 // ============================================================================
-// SECTION 5: CUSTOM HOOKS (Pivot Logic)
+// SECTION 5: CUSTOM HOOKS (Pivot & Chart Logic)
 // ============================================================================
 interface UsePivotLogicProps {
   data: AggregatedRecord[];
@@ -347,17 +339,18 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     return rows
   }, [pivotData.roots, expandedRows])
 
+  // --- PERUBAHAN DI SINI (getHeaderInfo) ---
   const getHeaderInfo = (colKey: string) => {
-      if (colKey.includes('-Total')) return { type: 'subtotal', label: 'TOTAL', parent: colKey.split('-')[0] }
+      // Jika key mengandung '-Total', berarti ini kolom subtotal tahun yang diexpand
+      if (colKey.includes('-Total')) {
+          const yearLabel = colKey.split('-')[0]
+          // Label diubah dari 'TOTAL' menjadi tahunnya (misal: '2024')
+          return { type: 'subtotal', label: yearLabel, parent: yearLabel } 
+      }
       
       if (colKey.includes('-')) {
           const [y, m] = colKey.split('-')
-          
-          // PERUBAHAN DI SINI:
-          // Sebelumnya: Mengambil nama dari MONTH_OPTIONS
-          // Sekarang: Langsung ambil angka bulannya saja (parseInt agar '01' jadi '1')
           const monthLabel = String(parseInt(m)) 
-          
           return { type: 'month', label: monthLabel, parent: y }
       }
       return { type: 'year', label: colKey, parent: colKey }
@@ -366,19 +359,13 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
   return { pivotData, visibleRows, getHeaderInfo }
 }
 
-// ============================================================================
-// SECTION 5.5: CUSTOM HOOKS (Chart Logic)
-// ============================================================================
 export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
   return useMemo(() => {
     // 1. DATA UNTUK TREND (Line Chart)
-    // Mengelompokkan data berdasarkan Tahun-Bulan
     const trendMap: Record<string, any> = {}
     
     data.forEach(item => {
-      // Format Key: "2024-1", "2024-2"
       const key = `${item.year}-${item.month}`
-      // Label Tampilan: "Jan 24", "Feb 24"
       const monthNames = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
       const label = `${monthNames[item.month]} ${String(item.year).slice(-2)}`
       
@@ -393,14 +380,12 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
       trendMap[key].total += item.total_amount
     })
 
-    // Sorting berdasarkan waktu (Tahun lalu Bulan)
     const trendData = Object.values(trendMap).sort((a: any, b: any) => {
         if (a.year !== b.year) return a.year - b.year
         return a.month - b.month
     })
 
     // 2. DATA UNTUK KATEGORI (Bar Chart)
-    // Mengelompokkan data berdasarkan Level 1 yang dipilih user
     const catMap: Record<string, number> = {}
     data.forEach(item => {
         const label = item.col_label_1 || 'Uncategorized'
@@ -410,36 +395,12 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
     const categoryData = Object.keys(catMap).map(key => ({
         name: key,
         value: catMap[key]
-    })).sort((a, b) => b.value - a.value) // Sort dari terbesar ke terkecil
+    })).sort((a, b) => b.value - a.value) 
 
-    // Ambil Top 10 saja agar grafik tidak penuh sesak
     const topCategoryData = categoryData.slice(0, 10)
 
     return { trendData, categoryData: topCategoryData }
   }, [data])
-}
-
-// Format Uang Singkat (K = Ribu, M = Juta, B = Miliar)
-const formatMoneyShort = (value: number) => {
-    if (value >= 1000000000) return (value / 1000000000).toFixed(1) + 'M' // Miliar
-    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'jt' // Juta
-    if (value >= 1000) return (value / 1000).toFixed(0) + 'rb' // Ribu
-    return value.toString()
-}
-
-// Komponen Tooltip Custom agar terlihat bagus
-const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 border border-slate-200 shadow-lg rounded text-xs">
-          <p className="font-bold text-slate-700 mb-1">{label}</p>
-          <p className="text-blue-600 font-mono">
-            Rp {payload[0].value.toLocaleString('id-ID')}
-          </p>
-        </div>
-      )
-    }
-    return null
 }
 
 // ============================================================================
@@ -489,7 +450,6 @@ export default function PivotPage() {
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows })
   
   // 2. Logic Chart
-  // UBAH DISINI: Ambil 'trendData' (untuk waktu) alih-alih categoryData
   const { trendData } = useChartLogic(chartData, 'product')
 
 // ============================================================================
@@ -565,7 +525,6 @@ export default function PivotPage() {
       })
 
       // --- FETCH 2: Untuk CHART (Fixed ke 'product') ---
-      // UBAH DI SINI: lvl1_field jadi 'product'
       const chartPromise = supabase.rpc('get_sales_analytics', {
         lvl1_field: 'product', 
         lvl2_field: '', 
@@ -677,10 +636,8 @@ export default function PivotPage() {
                 </div>
                 <div className="flex-1 w-full min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
-                        {/* Hapus layout="vertical" agar bar menghadap ke atas */}
                         <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            {/* XAxis sekarang adalah NAME (Waktu) */}
                             <XAxis 
                                 dataKey="name" 
                                 tick={{fontSize: 11, fill: '#64748b'}} 
@@ -688,7 +645,6 @@ export default function PivotPage() {
                                 tickLine={false} 
                                 tickMargin={10}
                             />
-                            {/* YAxis sekarang adalah VALUE (Angka) */}
                             <YAxis 
                                 tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)+'jt'} 
                                 tick={{fontSize: 10, fill: '#64748b'}} 
@@ -707,7 +663,6 @@ export default function PivotPage() {
                                     </div>
                                 ) : null} 
                             />
-                            {/* Bar menghadap atas */}
                             <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
                         </BarChart>
                     </ResponsiveContainer>
