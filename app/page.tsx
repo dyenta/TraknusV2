@@ -60,6 +60,21 @@ export const MONTH_OPTIONS = [
     { label: 'Okt', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Des', value: '12' }
 ]
 
+const MONTH_COLORS = [
+    "#4338ca", // Jan (Paling Bawah - Gelap/Indigo 700)
+    "#4f46e5", 
+    "#5156cf",
+    "#5a5ee0",
+    "#6366f1", // Mei (Sedang)
+    "#6d78e9",
+    "#7782f0",
+    "#818cf8", // Agu
+    "#8795f3",
+    "#919ff6",
+    "#9baaf9",
+    "#a5b4fc"  // Des (Paling Atas - Terang/Indigo 300)
+]
+
 // ============================================================================
 // SECTION 4: UI SUB-COMPONENTS
 // ============================================================================
@@ -403,21 +418,24 @@ export function useChartLogic(data: AggregatedRecord[]) {
     const trendMap: Record<string, any> = {}
     
     data.forEach(item => {
-      // PERUBAHAN: Key sekarang hanya tahun (string), bukan tahun-bulan
       const key = String(item.year)
+      const monthKey = String(item.month) // key untuk bulan: "1", "2", ... "12"
       
       if (!trendMap[key]) {
         trendMap[key] = { 
-            name: key, // Label di sumbu X hanya Tahun (misal: "2023")
+            name: key, 
             year: item.year, 
             total: 0 
+            // Bulan akan otomatis ditambahkan dinamis di bawah
         }
       }
-      // Akumulasi total amount ke dalam tahun tersebut
+      // Akumulasi total tahunan
       trendMap[key].total += item.total_amount
+      
+      // Akumulasi per bulan spesifik untuk Stacked Bar
+      trendMap[key][monthKey] = (trendMap[key][monthKey] || 0) + item.total_amount
     })
 
-    // Sort berdasarkan tahun (asc)
     const trendData = Object.values(trendMap).sort((a: any, b: any) => a.year - b.year)
 
     return { trendData }
@@ -436,7 +454,7 @@ export default function PivotPage() {
 
   // Filter State
   const [lvl1, setLvl1] = useState<string>('business_area')
-  const [lvl2, setLvl2] = useState<string>('product')
+  const [lvl2, setLvl2] = useState<string>('')
   const [lvl3, setLvl3] = useState<string>('') 
   const [lvl4, setLvl4] = useState<string>('') 
 
@@ -478,7 +496,7 @@ export default function PivotPage() {
   })
   
   // 2. Logic Chart
-  const { trendData } = useChartLogic(chartData, 'product')
+  const { trendData } = useChartLogic(chartData)
 
 // ============================================================================
 // SECTION 7: DATA FETCHING & EFFECTS
@@ -659,17 +677,18 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (Sama) */}
+        {/* 2. CHARTS SECTION (UPDATE DISINI) */}
         {chartData.length > 0 && (
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
+            // PERUBAHAN 1: h-80 diubah jadi h-[450px] agar lebih lega untuk tooltip panjang
+            // PERUBAHAN 2: z-0 diubah jadi z-45 agar tooltip tampil DI ATAS container zoom/kontrol
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-45">
                 
-                {/* TAMBAHAN: Overlay Loading untuk Grafik (Konsisten dengan Tabel) */}
+                {/* Overlay Loading (Tetap sama) */}
                 {(loading || isRefreshing) && (
                      <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl transition-all duration-200">
-                        {/* Spinner kecil opsional agar user tahu sedang proses */}
                         <div className="bg-white px-3 py-2 rounded-lg shadow-md border border-slate-100 flex items-center gap-2">
                             <RefreshCcw className="animate-spin text-blue-600" size={16} />
-                    <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
+                            <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
                         </div>
                      </div>
                 )}
@@ -681,9 +700,11 @@ export default function PivotPage() {
                         <p className="text-[11px] text-slate-400">Total penjualan per Tahun (Yearly Trend)</p>
                     </div>
                 </div>
+                
                 <div className="flex-1 w-full min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                        {/* Margin bottom diperbesar sedikit lagi ke 20 agar label X aman */}
+                        <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis 
                                 dataKey="name" 
@@ -693,31 +714,70 @@ export default function PivotPage() {
                                 tickMargin={10}
                             />
                             <YAxis 
-                                tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)+'jt'} 
+                                tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} 
                                 tick={{fontSize: 10, fill: '#64748b'}} 
                                 axisLine={false} 
                                 tickLine={false} 
-                                width={40} 
+                                width={60} 
                             />
+                            
+                            {/* Tooltip (Kode sebelumnya sudah benar, pastikan bagian ini sama) */}
                             <Tooltip 
                                 cursor={{fill: '#f8fafc'}} 
-                                content={({ active, payload, label }) => active && payload && payload.length ? (
-                                    <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50">
-                                        <div className="font-bold text-slate-800 mb-1">{label}</div>
-                                        <div className="text-indigo-600 font-mono font-bold bg-indigo-50 px-1.5 py-0.5 rounded w-fit">
-                                            Rp {payload[0].value.toLocaleString('id-ID')}
-                                        </div>
-                                    </div>
-                                ) : null} 
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        const total = payload.reduce((acc: number, p: any) => acc + (p.value || 0), 0)
+                                        return (
+                                            <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50 min-w-45">
+                                                <div className="font-bold text-slate-800 mb-1 border-b border-slate-100 pb-1">{label}</div>
+                                                <div className="flex flex-col gap-1 mb-2">
+                                                    {payload.slice().reverse().map((entry: any) => (
+                                                        entry.value > 0 && (
+                                                            <div key={entry.name} className="flex items-center justify-between gap-3 text-[10px]">
+                                                                <span className="flex items-center gap-1">
+                                                                    <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
+                                                                    {entry.name}
+                                                                </span>
+                                                                <span className="font-mono">
+                                                                    {entry.value >= 1000000000 
+                                                                        ? (entry.value/1000000000).toFixed(1)+' M' 
+                                                                        : (entry.value/1000000).toFixed(0)+' jt'}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    ))}
+                                                </div>
+                                                
+                                                {/* Total dengan Layout Justify Between (Penyelesaian masalah "Nempel") */}
+                                                <div className="flex justify-between items-center w-full border-t border-slate-100 pt-2 mt-2">
+                                                    <span className="font-bold text-slate-600">Total</span>
+                                                    <span className="font-bold text-indigo-700">Rp {total.toLocaleString('id-ID')}</span>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                    return null
+                                }} 
                             />
-                            <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
+                            
+                            {MONTH_OPTIONS.map((month, index) => (
+                                <Bar 
+                                    key={month.value}
+                                    dataKey={month.value}
+                                    name={month.label}
+                                    stackId="a"
+                                    fill={MONTH_COLORS[index]} 
+                                    barSize={40}
+                                    radius={[0, 0, 0, 0]}
+                                />
+                            ))}
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
             </div>
         )}
 
-        {/* 3. CONTROLS (HIERARCHY & ZOOM) (Sama) */}
+        {/* 3. CONTROLS (HIERARCHY & ZOOM) (TETAP Z-40, jadi Chart Z-45 akan menutupinya jika overlap) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            {/* Zoom Control */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
