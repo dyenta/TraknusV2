@@ -7,7 +7,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
   LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
   ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
-  Maximize, Search, X, BarChart3, LineChart as LineChartIcon,
+  Maximize, Search, X, BarChart3, 
   Calendar, CalendarRange 
 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
@@ -94,10 +94,10 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- 4.3 MultiSelect (Searchable) ---
+// --- 4.3 MultiSelect (Searchable & Null Handling Fixed) ---
 interface MultiSelectProps {
     label: string;
-    options?: (string | null)[];
+    options?: (string | null | number)[];
     optionsRaw?: { label: string, value: string }[];
     selected: string[];
     onChange: (val: string[]) => void;
@@ -111,13 +111,26 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   const finalOptions = useMemo(() => {
     if (optionsRaw) return optionsRaw;
     if (options) {
-        return options.map(o => ({ 
-            label: o || "(Empty)", 
-            value: o || ""         
-        }))
+        return options.map(o => {
+            // 1. Cek apakah data kosong (null, undefined, atau string kosong)
+            const isNullOrEmpty = o === null || o === undefined || String(o).trim() === '';
+
+            // 2. Buat Label Dinamis sesuai Permintaan
+            // Jika data dari DB memang "No PSS", gunakan itu.
+            // Jika data kosong/null, kita paksa labelnya menjadi "No [Nama Filter]" (misal: "No PSS", "No Product").
+            // Ini menggantikan label "(None)" atau "(Empty)".
+            const displayLabel = isNullOrEmpty ? `No ${label}` : String(o);
+
+            // 3. Set Value
+            // Value tetap string kosong "" jika null, agar filter database tetap berjalan untuk row yang kosong.
+            return { 
+                label: displayLabel, 
+                value: isNullOrEmpty ? "" : String(o)         
+            }
+        })
     }
     return []
-  }, [options, optionsRaw])
+  }, [options, optionsRaw, label]) // Label ditambahkan ke dependency agar update otomatis
   
   const filteredOptions = finalOptions.filter(opt => {
     const labelText = opt.label || ""; 
@@ -144,10 +157,13 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
       let newSelected = [...selected]
       if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
       
-      if (newSelected.includes(val)) newSelected = newSelected.filter(item => item !== val)
-      else newSelected.push(val)
+      if (newSelected.includes(val)) {
+          newSelected = newSelected.filter(item => item !== val)
+      } else {
+          newSelected.push(val)
+      }
       
-      if (newSelected.length === finalOptions.length) onChange(['All'])
+      if (newSelected.length === finalOptions.length && finalOptions.length > 0) onChange(['All'])
       else onChange(newSelected)
     }
   }
@@ -221,12 +237,15 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
                 {filteredOptions.length > 0 ? (
                     filteredOptions.map(opt => {
                         const isSelected = selected.includes(opt.value) || selected.includes('All')
+                        const isNone = opt.value === "" 
                         return (
-                            <div key={opt.value} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
+                            <div key={opt.value || 'empty-key'} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
                                 <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
                                     {isSelected && <Check size={8} className="text-white" />}
                                 </div>
-                                <span className={isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'}>{opt.label}</span>
+                                <span className={`${isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'} ${isNone ? 'italic text-slate-500' : ''}`}>
+                                    {opt.label}
+                                </span>
                             </div>
                         )
                     })
@@ -284,15 +303,24 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
       grandTotal += val
       for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
 
+      // PERBAIKAN: Handle label kosong di Pivot Table juga
       let levels = [item.col_label_1, item.col_label_2, item.col_label_3, item.col_label_4]
-      levels = levels.filter(l => l && l !== '-' && l !== 'Others' && l !== '(None)')
-      if (levels.length === 0) levels = ['Uncategorized']
+      // Kita izinkan '(None)' atau string kosong masuk sebagai kategori valid
+      levels = levels.filter(l => l !== '(None)') 
+      
+      // Jika level pertama kosong/null, kita beri label '(None)' agar tidak hilang
+      if (!levels[0]) levels[0] = '(None)'
+
+      // Bersihkan array dari null/undefined sisa
+      const cleanLevels = levels.filter(l => l !== null && l !== undefined && l !== '')
+      
+      if (cleanLevels.length === 0) cleanLevels.push('(None)')
 
       let currentMap = rootMap
       let currentIdPath = ""
 
-      levels.forEach((lvlLabel, idx) => {
-        const isLastLevel = idx === levels.length - 1
+      cleanLevels.forEach((lvlLabel, idx) => {
+        const isLastLevel = idx === cleanLevels.length - 1
         currentIdPath = currentIdPath ? `${currentIdPath}|${lvlLabel}` : lvlLabel
         
         if (!currentMap[lvlLabel]) {
@@ -340,25 +368,17 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
   }, [pivotData.roots, expandedRows])
 
   const getHeaderInfo = (colKey: string) => {
-      // 1. Handle Subtotal Column (e.g. "2024-Total") -> Label jadi Tahun ("2024")
       if (colKey.includes('-Total')) {
           const yearLabel = colKey.split('-')[0]
           return { type: 'subtotal', label: yearLabel, parent: yearLabel } 
       }
-      
-      // 2. Handle Month Columns (e.g. "2024-01") -> Label ambil dari MONTH_OPTIONS
       if (colKey.includes('-')) {
           const [y, m] = colKey.split('-')
           const mInt = parseInt(m)
-          
-          // Cari label bulan dari MONTH_OPTIONS berdasarkan value string-nya ('1', '2', dst)
           const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(mInt))
           const monthLabel = foundMonth ? foundMonth.label : String(mInt)
-
           return { type: 'month', label: monthLabel, parent: y }
       }
-
-      // 3. Handle Year Columns (e.g. "2024")
       return { type: 'year', label: colKey, parent: colKey }
   }
 
@@ -371,8 +391,6 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
     
     data.forEach(item => {
       const key = `${item.year}-${item.month}`
-      
-      // Menggunakan MONTH_OPTIONS juga untuk chart agar konsisten
       const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(item.month))
       const monthName = foundMonth ? foundMonth.label : ''
       const label = `${monthName} ${String(item.year).slice(-2)}`
@@ -395,7 +413,7 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
 
     const catMap: Record<string, number> = {}
     data.forEach(item => {
-        const label = item.col_label_1 || 'Uncategorized'
+        const label = item.col_label_1 || '(None)' // Perbaikan label chart
         catMap[label] = (catMap[label] || 0) + item.total_amount
     })
 
@@ -495,6 +513,7 @@ export default function PivotPage() {
              months: data.month || [],
              areas: data.area || [],
              business_areas: data.business_area || [],
+             // Data PSS/Product dll bisa berisi null/empty string dari DB
              pss: data.pss || [],
              key_account_types: data.key_account_type || [],
              products: data.product || [],
@@ -505,10 +524,11 @@ export default function PivotPage() {
     }
 
     fetchDynamicOptions()
-    fetchAggregatedData()
+    fetchAggregatedData() 
   }, [
     selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas, 
-    selectedPSS, selectedKAT, selectedCustGroups, selectedProducts
+    selectedPSS, selectedKAT, selectedCustGroups, selectedProducts,
+    lvl1, lvl2, lvl3, lvl4 
   ]) 
 
   // 7.3 Fetch Table & Chart Data Function (DUAL FETCH)
@@ -518,7 +538,6 @@ export default function PivotPage() {
       let monthInts: number[] = []
       if (!selectedMonths.includes('All')) monthInts = selectedMonths.map(m => parseInt(m))
 
-      // --- FETCH 1: Untuk PIVOT TABLE (Dinamis ikut Lvl 1 user) ---
       const pivotPromise = supabase.rpc('get_sales_analytics', {
         lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, 
         filter_years: selectedYears,
@@ -531,7 +550,6 @@ export default function PivotPage() {
         filter_products: selectedProducts
       })
 
-      // --- FETCH 2: Untuk CHART (Fixed ke 'product') ---
       const chartPromise = supabase.rpc('get_sales_analytics', {
         lvl1_field: 'product', 
         lvl2_field: '', 
@@ -631,7 +649,7 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (SINGLE VERTICAL BAR CHART: TIME SERIES) */}
+        {/* 2. CHARTS SECTION */}
         {!loading && chartData.length > 0 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
