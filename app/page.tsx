@@ -404,46 +404,29 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
   return { pivotData, visibleRows, getHeaderInfo }
 }
 
-export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
+export function useChartLogic(data: AggregatedRecord[]) {
   return useMemo(() => {
     const trendMap: Record<string, any> = {}
     
     data.forEach(item => {
-      const key = `${item.year}-${item.month}`
-      const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(item.month))
-      const monthName = foundMonth ? foundMonth.label : ''
-      const label = `${monthName} ${String(item.year).slice(-2)}`
+      // PERUBAHAN: Key sekarang hanya tahun (string), bukan tahun-bulan
+      const key = String(item.year)
       
       if (!trendMap[key]) {
         trendMap[key] = { 
-            name: label, 
+            name: key, // Label di sumbu X hanya Tahun (misal: "2023")
             year: item.year, 
-            month: item.month, 
             total: 0 
         }
       }
+      // Akumulasi total amount ke dalam tahun tersebut
       trendMap[key].total += item.total_amount
     })
 
-    const trendData = Object.values(trendMap).sort((a: any, b: any) => {
-        if (a.year !== b.year) return a.year - b.year
-        return a.month - b.month
-    })
+    // Sort berdasarkan tahun (asc)
+    const trendData = Object.values(trendMap).sort((a: any, b: any) => a.year - b.year)
 
-    const catMap: Record<string, number> = {}
-    data.forEach(item => {
-        const label = item.col_label_1 || '(None)' 
-        catMap[label] = (catMap[label] || 0) + item.total_amount
-    })
-
-    const categoryData = Object.keys(catMap).map(key => ({
-        name: key,
-        value: catMap[key]
-    })).sort((a, b) => b.value - a.value) 
-
-    const topCategoryData = categoryData.slice(0, 10)
-
-    return { trendData, categoryData: topCategoryData }
+    return { trendData }
   }, [data])
 }
 
@@ -674,14 +657,27 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (Sama) */}
-        {!loading && chartData.length > 0 && (
+        {/* 2. CHARTS SECTION */}
+        {/* UPDATE: Hapus pengecekan '!loading' agar grafik tidak hilang saat refresh */}
+        {chartData.length > 0 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
+                
+                {/* TAMBAHAN: Overlay Loading untuk Grafik (Konsisten dengan Tabel) */}
+                {(loading || isRefreshing) && (
+                     <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl transition-all duration-200">
+                        {/* Spinner kecil opsional agar user tahu sedang proses */}
+                        <div className="bg-white px-3 py-2 rounded-lg shadow-md border border-slate-100 flex items-center gap-2">
+                            <RefreshCcw className="animate-spin text-blue-600" size={16} />
+                            <span className="text-[10px] font-bold text-slate-500">Updating...</span>
+                        </div>
+                     </div>
+                )}
+
                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
                     <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={18}/></div>
                     <div>
                         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Sales Performance</h3>
-                        <p className="text-[11px] text-slate-400">Total penjualan per Tahun / Bulan (Sesuai Filter)</p>
+                        <p className="text-[11px] text-slate-400">Total penjualan per Tahun (Yearly Trend)</p>
                     </div>
                 </div>
                 <div className="flex-1 w-full min-h-0">
