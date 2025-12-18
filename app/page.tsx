@@ -339,20 +339,26 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     return rows
   }, [pivotData.roots, expandedRows])
 
-  // --- PERUBAHAN DI SINI (getHeaderInfo) ---
   const getHeaderInfo = (colKey: string) => {
-      // Jika key mengandung '-Total', berarti ini kolom subtotal tahun yang diexpand
+      // 1. Handle Subtotal Column (e.g. "2024-Total") -> Label jadi Tahun ("2024")
       if (colKey.includes('-Total')) {
           const yearLabel = colKey.split('-')[0]
-          // Label diubah dari 'TOTAL' menjadi tahunnya (misal: '2024')
           return { type: 'subtotal', label: yearLabel, parent: yearLabel } 
       }
       
+      // 2. Handle Month Columns (e.g. "2024-01") -> Label ambil dari MONTH_OPTIONS
       if (colKey.includes('-')) {
           const [y, m] = colKey.split('-')
-          const monthLabel = String(parseInt(m)) 
+          const mInt = parseInt(m)
+          
+          // Cari label bulan dari MONTH_OPTIONS berdasarkan value string-nya ('1', '2', dst)
+          const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(mInt))
+          const monthLabel = foundMonth ? foundMonth.label : String(mInt)
+
           return { type: 'month', label: monthLabel, parent: y }
       }
+
+      // 3. Handle Year Columns (e.g. "2024")
       return { type: 'year', label: colKey, parent: colKey }
   }
 
@@ -361,13 +367,15 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
 
 export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
   return useMemo(() => {
-    // 1. DATA UNTUK TREND (Line Chart)
     const trendMap: Record<string, any> = {}
     
     data.forEach(item => {
       const key = `${item.year}-${item.month}`
-      const monthNames = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
-      const label = `${monthNames[item.month]} ${String(item.year).slice(-2)}`
+      
+      // Menggunakan MONTH_OPTIONS juga untuk chart agar konsisten
+      const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(item.month))
+      const monthName = foundMonth ? foundMonth.label : ''
+      const label = `${monthName} ${String(item.year).slice(-2)}`
       
       if (!trendMap[key]) {
         trendMap[key] = { 
@@ -385,7 +393,6 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
         return a.month - b.month
     })
 
-    // 2. DATA UNTUK KATEGORI (Bar Chart)
     const catMap: Record<string, number> = {}
     data.forEach(item => {
         const label = item.col_label_1 || 'Uncategorized'
