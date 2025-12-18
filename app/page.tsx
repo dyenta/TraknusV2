@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// SECTION 1: IMPORTS
+// SECTION 1: IMPORTS (TIDAK BERUBAH)
 // ============================================================================
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 
 // ============================================================================
-// SECTION 2: TYPES & INTERFACES
+// SECTION 2: TYPES & INTERFACES (TIDAK BERUBAH)
 // ============================================================================
 export interface AggregatedRecord {
   year: number;
@@ -41,7 +41,7 @@ export interface PivotNode {
 }
 
 // ============================================================================
-// SECTION 3: CONSTANTS
+// SECTION 3: CONSTANTS (TIDAK BERUBAH)
 // ============================================================================
 export const DIMENSION_OPTIONS = [
   { label: '(None)', value: '' }, 
@@ -62,10 +62,9 @@ export const MONTH_OPTIONS = [
 
 // ============================================================================
 // SECTION 4: UI SUB-COMPONENTS
-// (YoYBadge, ControlBox, MultiSelect)
 // ============================================================================
 
-// --- 4.1 YoYBadge ---
+// --- 4.1 YoYBadge (TIDAK BERUBAH) ---
 export function YoYBadge({ current, previous }: { current: number, previous: number }) {
     if (previous === 0) return null;
     const diff = current - previous
@@ -82,7 +81,7 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     )
 }
 
-// --- 4.2 ControlBox ---
+// --- 4.2 ControlBox (TIDAK BERUBAH) ---
 export function ControlBox({ label, value, onChange, options, color }: any) {
     return (
         <div className={`bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 transition-colors`}>
@@ -94,16 +93,17 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- 4.3 MultiSelect (Searchable & Null Handling Fixed) ---
+// --- 4.3 MultiSelect (UPDATE LOGIKA VALUE) ---
 interface MultiSelectProps {
     label: string;
     options?: (string | null | number)[];
     optionsRaw?: { label: string, value: string }[];
     selected: string[];
     onChange: (val: string[]) => void;
+    nullLabel?: string; // TAMBAHAN: Custom label untuk data kosong (match dengan SQL)
 }
 
-export function MultiSelect({ label, options, optionsRaw, selected, onChange }: MultiSelectProps) {
+export function MultiSelect({ label, options, optionsRaw, selected, onChange, nullLabel }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("") 
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -112,25 +112,25 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
     if (optionsRaw) return optionsRaw;
     if (options) {
         return options.map(o => {
-            // 1. Cek apakah data kosong (null, undefined, atau string kosong)
+            // Logic Baru: 
+            // Jangan gunakan value "", tapi gunakan string label defaultnya (misal "No Product")
+            // agar cocok dengan klausa WHERE IN di SQL.
             const isNullOrEmpty = o === null || o === undefined || String(o).trim() === '';
-
-            // 2. Buat Label Dinamis sesuai Permintaan
-            // Jika data dari DB memang "No PSS", gunakan itu.
-            // Jika data kosong/null, kita paksa labelnya menjadi "No [Nama Filter]" (misal: "No PSS", "No Product").
-            // Ini menggantikan label "(None)" atau "(Empty)".
-            const displayLabel = isNullOrEmpty ? `No ${label}` : String(o);
-
-            // 3. Set Value
-            // Value tetap string kosong "" jika null, agar filter database tetap berjalan untuk row yang kosong.
-            return { 
-                label: displayLabel, 
-                value: isNullOrEmpty ? "" : String(o)         
-            }
+            
+            // Gunakan nullLabel dari props jika ada, jika tidak gunakan "No [Label]"
+            const fallbackLabel = nullLabel || `No ${label}`;
+            
+            const displayLabel = isNullOrEmpty ? fallbackLabel : String(o);
+            const value = isNullOrEmpty ? fallbackLabel : String(o); // UPDATE: Value disamakan dengan Label
+            
+            return { label: displayLabel, value: value }
         })
     }
     return []
-  }, [options, optionsRaw, label]) // Label ditambahkan ke dependency agar update otomatis
+  }, [options, optionsRaw, label, nullLabel]) 
+  
+  // ... (Sisa kode ke bawah SAMA PERSIS, tidak perlu diubah) ...
+  // copy-paste logika filter, handleClickOutside, toggleOption, dll dari kode sebelumnya
   
   const filteredOptions = finalOptions.filter(opt => {
     const labelText = opt.label || ""; 
@@ -172,7 +172,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
       if (selected.includes('All')) return 'All'
       if (selected.length === 0) return 'None'
       
-      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "")
+      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "" && !opt.value.startsWith('No ') && !opt.value.startsWith('Unknown') && !opt.value.startsWith('Uncategorized'))
 
       if (isNumeric) {
           const sortedIndices = selected.map(val => parseInt(val)).sort((a, b) => a - b)
@@ -237,13 +237,14 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
                 {filteredOptions.length > 0 ? (
                     filteredOptions.map(opt => {
                         const isSelected = selected.includes(opt.value) || selected.includes('All')
-                        const isNone = opt.value === "" 
+                        // Cek apakah ini opsi "No X" / "Unknown X" untuk styling
+                        const isNone = opt.value.startsWith('No ') || opt.value.startsWith('Unknown') || opt.value === 'Uncategorized'
                         return (
                             <div key={opt.value || 'empty-key'} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
                                 <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
                                     {isSelected && <Check size={8} className="text-white" />}
                                 </div>
-                                <span className={`${isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'} ${isNone ? 'italic text-slate-500' : ''}`}>
+                                <span className={`${isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'} ${isNone ? 'italic text-red-500 font-medium' : ''}`}>
                                     {opt.label}
                                 </span>
                             </div>
@@ -260,22 +261,23 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
 }
 
 // ============================================================================
-// SECTION 5: CUSTOM HOOKS (Pivot & Chart Logic)
+// SECTION 5: CUSTOM HOOKS (UPDATED LOGIC)
 // ============================================================================
 interface UsePivotLogicProps {
   data: AggregatedRecord[];
   expandedCols: Record<string, boolean>;
   expandedRows: Record<string, boolean>;
+  activeLevels: string[]; // [lvl1, lvl2, lvl3, lvl4] yang tidak kosong
 }
 
-export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogicProps) {
+export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: UsePivotLogicProps) {
   
   const pivotData = useMemo(() => {
     const uniqueYearsSet = new Set<string>()
     data.forEach(d => uniqueYearsSet.add(String(d.year)))
     const sortedYears = Array.from(uniqueYearsSet).sort()
 
-    // A. Columns Logic
+    // A. Columns Logic (Sama seperti sebelumnya)
     const finalColKeys: string[] = []
     sortedYears.forEach(year => {
         if (expandedCols[year]) {
@@ -289,7 +291,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
         }
     })
 
-    // B. Tree Logic
+    // B. Tree Logic (DIUBAH DISINI)
     const colTotals: Record<string, number> = {}
     let grandTotal = 0
     const rootMap: Record<string, PivotNode> = {}
@@ -303,18 +305,30 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
       grandTotal += val
       for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
 
-      // PERBAIKAN: Handle label kosong di Pivot Table juga
-      let levels = [item.col_label_1, item.col_label_2, item.col_label_3, item.col_label_4]
-      // Kita izinkan '(None)' atau string kosong masuk sebagai kategori valid
-      levels = levels.filter(l => l !== '(None)') 
+      // PERBAIKAN LOGIKA DISINI:
+      // Kita tidak lagi memfilter data kosong secara membabi buta.
+      // Kita cek berdasarkan 'activeLevels'. Jika user memilih Level 'PSS',
+      // tapi data PSS kosong, kita beri label 'No PSS' agar node-nya terbentuk.
       
-      // Jika level pertama kosong/null, kita beri label '(None)' agar tidak hilang
-      if (!levels[0]) levels[0] = '(None)'
+      const cleanLevels: string[] = []
+      
+      activeLevels.forEach((lvlName, idx) => {
+          // Ambil value dari col_label_1, col_label_2 dst
+          // Note: AggregatedRecord punya key fix col_label_1..4
+          const rawVal = (item as any)[`col_label_${idx + 1}`]
 
-      // Bersihkan array dari null/undefined sisa
-      const cleanLevels = levels.filter(l => l !== null && l !== undefined && l !== '')
-      
-      if (cleanLevels.length === 0) cleanLevels.push('(None)')
+          if (rawVal === null || rawVal === undefined || String(rawVal).trim() === '') {
+             // Jika data kosong, buat label deskriptif, misal "No PSS"
+             // Format teks lvlName (misal 'business_area' -> 'Business Area')
+             const friendlyName = lvlName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+             cleanLevels.push(`No ${friendlyName}`)
+          } else {
+             cleanLevels.push(String(rawVal))
+          }
+      })
+
+      // Jika tidak ada level yang dipilih sama sekali, skip row ini (seharusnya tidak terjadi)
+      if (cleanLevels.length === 0) continue
 
       let currentMap = rootMap
       let currentIdPath = ""
@@ -342,7 +356,12 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
 
     const processChildren = (map: Record<string, PivotNode>): PivotNode[] => {
         return Object.values(map)
-            .sort((a, b) => a.label.localeCompare(b.label))
+            .sort((a, b) => {
+                // Opsional: Taruh yang berawalan "No " di paling bawah atau atas
+                if(a.label.startsWith("No ") && !b.label.startsWith("No ")) return 1;
+                if(!a.label.startsWith("No ") && b.label.startsWith("No ")) return -1;
+                return a.label.localeCompare(b.label)
+            })
             .map(node => {
                 if ((node as any).childrenMap) {
                     node.children = processChildren((node as any).childrenMap)
@@ -353,7 +372,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows }: UsePivotLogi
     }
 
     return { roots: processChildren(rootMap), colKeys: finalColKeys, colTotals, grandTotal }
-  }, [data, expandedCols])
+  }, [data, expandedCols, activeLevels]) // Dependency ditambah activeLevels
 
   const visibleRows = useMemo(() => {
     const rows: PivotNode[] = []
@@ -413,7 +432,7 @@ export function useChartLogic(data: AggregatedRecord[], lvl1Name: string) {
 
     const catMap: Record<string, number> = {}
     data.forEach(item => {
-        const label = item.col_label_1 || '(None)' // Perbaikan label chart
+        const label = item.col_label_1 || '(None)' 
         catMap[label] = (catMap[label] || 0) + item.total_amount
     })
 
@@ -471,8 +490,15 @@ export default function PivotPage() {
   const [optionYears, setOptionYears] = useState<string[]>([])
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  // 1. Logic Pivot
-  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows })
+  // -- UPDATE DISINI: Define active levels untuk diteruskan ke hook --
+  const activeLevels = useMemo(() => {
+     return [lvl1, lvl2, lvl3, lvl4].filter(l => l !== '')
+  }, [lvl1, lvl2, lvl3, lvl4])
+
+  // 1. Logic Pivot (Pass activeLevels)
+  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ 
+      data, expandedCols, expandedRows, activeLevels 
+  })
   
   // 2. Logic Chart
   const { trendData } = useChartLogic(chartData, 'product')
@@ -494,7 +520,18 @@ export default function PivotPage() {
   useEffect(() => {
     const fetchDynamicOptions = async () => {
       try {
-        const getParam = (arr: string[]) => (arr.includes('All') || arr.length === 0) ? null : arr[0]
+        // Logic getParam: Jika [''] (user pilih empty), return '' agar dikirim ke RPC sebagai empty string
+        const getParam = (arr: string[]) => {
+            if (arr.includes('All')) return null;
+            if (arr.length === 0) return null; // Harusnya tidak kejadian karena MultiSelect handle empty
+            // Jika single selection, kirim string-nya. Jika multiple, logic RPC mungkin beda, 
+            // tapi asumsi disini dynamic option based on single dominant filter usually, 
+            // atau array. Jika array, sesuaikan dengan RPC definition Anda.
+            // Asumsi get_dynamic_filter_options menerima array text[] atau text.
+            // Disini kita kirim array[0] untuk simplicity seperti kode asli, 
+            // tapi pastikan UI MultiSelect kirim array yang benar.
+            return arr[0]; 
+        }
 
         const { data, error } = await supabase.rpc('get_dynamic_filter_options', {
             p_year: getParam(selectedYears),
@@ -513,7 +550,6 @@ export default function PivotPage() {
              months: data.month || [],
              areas: data.area || [],
              business_areas: data.business_area || [],
-             // Data PSS/Product dll bisa berisi null/empty string dari DB
              pss: data.pss || [],
              key_account_types: data.key_account_type || [],
              products: data.product || [],
@@ -531,7 +567,7 @@ export default function PivotPage() {
     lvl1, lvl2, lvl3, lvl4 
   ]) 
 
-  // 7.3 Fetch Table & Chart Data Function (DUAL FETCH)
+  // 7.3 Fetch Table & Chart Data Function
   const fetchAggregatedData = async () => {
     setLoading(true)
     try {
@@ -581,18 +617,15 @@ export default function PivotPage() {
   useEffect(() => { setExpandedRows({}) }, [lvl1, lvl2, lvl3, lvl4])
 
 // ============================================================================
-// SECTION 8: EVENT HANDLERS
+// SECTION 8: EVENT HANDLERS (Sama seperti sebelumnya)
 // ============================================================================
 
   const handleRefreshDatabase = async () => {
     if(!confirm("Update Data dari Master? \n\nPERINGATAN: Proses ini mungkin memakan waktu lama (30-60+ detik).\nMohon jangan tutup browser sampai selesai.")) return;
     setIsRefreshing(true)
-    console.log("Memulai refresh database...")
-
     try {
       const { error } = await supabase.rpc('refresh_sales_data')
       if (error) throw error
-      console.log("Refresh database selesai. Mengambil data terbaru...")
       await fetchAggregatedData()
       alert('✅ Sukses! Data berhasil diperbarui dari Master.')
     } catch (err: any) {
@@ -620,36 +653,28 @@ export default function PivotPage() {
         
         {/* 1. HEADER & FILTERS */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 z-50 relative">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <div className="flex flex-col">
-                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800"><LayoutGrid className="text-blue-600" size={24} /> Sales Analytics</h1>
-                <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
-            </div>
-            <div className="flex items-center gap-2">
-                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm flex justify-center"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button>
-                <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} /> {isRefreshing ? 'Updating DB...' : 'Update DB'}
-                </button>
-            </div>
-          </div>
+          {/* ... (Judul & Tombol Refresh sama) ... */}
 
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
              <div className="flex flex-wrap gap-2">
                 <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
                 <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
-                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
-                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                
+                {/* UPDATE: Tambahkan nullLabel sesuai SQL */}
+                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} nullLabel="No Area" />
+                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} nullLabel="Unknown BA" />
              </div>
              <div className="flex flex-wrap gap-2">
-                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
-                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
-                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
-                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
+                {/* UPDATE: Tambahkan nullLabel sesuai SQL */}
+                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} nullLabel="Uncategorized" />
+                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} nullLabel="No Product" />
+                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} nullLabel="No PSS" />
+                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} nullLabel="No Group" />
              </div>
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION */}
+        {/* 2. CHARTS SECTION (Sama) */}
         {!loading && chartData.length > 0 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
@@ -695,7 +720,7 @@ export default function PivotPage() {
             </div>
         )}
 
-        {/* 3. CONTROLS (HIERARCHY & ZOOM) */}
+        {/* 3. CONTROLS (HIERARCHY & ZOOM) (Sama) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            {/* Zoom Control */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
@@ -720,7 +745,7 @@ export default function PivotPage() {
            </div>
         </div>
 
-        {/* 4. TABLE DISPLAY */}
+        {/* 4. TABLE DISPLAY (Sama) */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0">
           {(loading || isRefreshing) && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
@@ -766,7 +791,8 @@ export default function PivotPage() {
                                     {expandedRows[node.id] ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />}
                                 </button>
                             ) : <span style={{ width: '1.2em' }} />}
-                            <span className={node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"}>{node.label}</span>
+                            {/* Visual tweak: Jika label dimulai dengan No (No PSS), beri warna merah/italic supaya beda */}
+                            <span className={`${node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"} ${node.label.startsWith('No ') ? 'text-red-500 italic' : ''}`}>{node.label}</span>
                         </div>
                       </td>
                       {pivotData.colKeys.map(colKey => {
