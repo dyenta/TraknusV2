@@ -93,17 +93,16 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- 4.3 MultiSelect (UPDATE LOGIKA VALUE) ---
+// --- 4.3 MultiSelect (DIUPDATE SEDIKIT) ---
 interface MultiSelectProps {
     label: string;
     options?: (string | null | number)[];
     optionsRaw?: { label: string, value: string }[];
     selected: string[];
     onChange: (val: string[]) => void;
-    nullLabel?: string; // TAMBAHAN: Custom label untuk data kosong (match dengan SQL)
 }
 
-export function MultiSelect({ label, options, optionsRaw, selected, onChange, nullLabel }: MultiSelectProps) {
+export function MultiSelect({ label, options, optionsRaw, selected, onChange }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("") 
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -112,26 +111,21 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange, nu
     if (optionsRaw) return optionsRaw;
     if (options) {
         return options.map(o => {
-            // Logic Baru: 
-            // Jangan gunakan value "", tapi gunakan string label defaultnya (misal "No Product")
-            // agar cocok dengan klausa WHERE IN di SQL.
+            // Logic: Data null/kosong/undefined akan dianggap sebagai kategori "No [Nama Filter]"
+            // Value-nya diset menjadi string kosong "" agar bisa difilter di DB
             const isNullOrEmpty = o === null || o === undefined || String(o).trim() === '';
+            const displayLabel = isNullOrEmpty ? `No ${label}` : String(o);
             
-            // Gunakan nullLabel dari props jika ada, jika tidak gunakan "No [Label]"
-            const fallbackLabel = nullLabel || `No ${label}`;
-            
-            const displayLabel = isNullOrEmpty ? fallbackLabel : String(o);
-            const value = isNullOrEmpty ? fallbackLabel : String(o); // UPDATE: Value disamakan dengan Label
-            
-            return { label: displayLabel, value: value }
+            return { 
+                label: displayLabel, 
+                value: isNullOrEmpty ? "" : String(o)         
+            }
         })
     }
     return []
-  }, [options, optionsRaw, label, nullLabel]) 
+  }, [options, optionsRaw, label]) 
   
-  // ... (Sisa kode ke bawah SAMA PERSIS, tidak perlu diubah) ...
-  // copy-paste logika filter, handleClickOutside, toggleOption, dll dari kode sebelumnya
-  
+  // ... (Sisa kode MultiSelect logika filtering dan click outside sama seperti sebelumnya)
   const filteredOptions = finalOptions.filter(opt => {
     const labelText = opt.label || ""; 
     return labelText.toLowerCase().includes(searchTerm.toLowerCase())
@@ -155,6 +149,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange, nu
         onChange(isAllSelected ? [] : ['All'])
     } else {
       let newSelected = [...selected]
+      // Jika sebelumnya All, maka anggap semua value terpilih, lalu kurangi yang di-klik
       if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
       
       if (newSelected.includes(val)) {
@@ -172,7 +167,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange, nu
       if (selected.includes('All')) return 'All'
       if (selected.length === 0) return 'None'
       
-      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "" && !opt.value.startsWith('No ') && !opt.value.startsWith('Unknown') && !opt.value.startsWith('Uncategorized'))
+      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "")
 
       if (isNumeric) {
           const sortedIndices = selected.map(val => parseInt(val)).sort((a, b) => a - b)
@@ -237,8 +232,7 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange, nu
                 {filteredOptions.length > 0 ? (
                     filteredOptions.map(opt => {
                         const isSelected = selected.includes(opt.value) || selected.includes('All')
-                        // Cek apakah ini opsi "No X" / "Unknown X" untuk styling
-                        const isNone = opt.value.startsWith('No ') || opt.value.startsWith('Unknown') || opt.value === 'Uncategorized'
+                        const isNone = opt.value === "" 
                         return (
                             <div key={opt.value || 'empty-key'} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
                                 <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
@@ -628,7 +622,7 @@ export default function PivotPage() {
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
 
 // ============================================================================
-// SECTION 9: JSX RENDER
+// SECTION 9: JSX RENDER (TIDAK BERUBAH)
 // ============================================================================
   return (
     <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
@@ -636,29 +630,36 @@ export default function PivotPage() {
         
         {/* 1. HEADER & FILTERS */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 z-50 relative">
-          {/* ... (Judul & Tombol Refresh sama) ... */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="flex flex-col">
+                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800"><LayoutGrid className="text-blue-600" size={24} /> Sales Analytics</h1>
+                <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
+            </div>
+            <div className="flex items-center gap-2">
+                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm flex justify-center"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button>
+                <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} /> {isRefreshing ? 'Updating DB...' : 'Update DB'}
+                </button>
+            </div>
+          </div>
 
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
              <div className="flex flex-wrap gap-2">
                 <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
                 <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
-                
-                {/* UPDATE: Tambahkan nullLabel sesuai SQL */}
-                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} nullLabel="No Area" />
-                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} nullLabel="Unknown BA" />
+                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
+                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
              </div>
              <div className="flex flex-wrap gap-2">
-                {/* UPDATE: Tambahkan nullLabel sesuai SQL */}
-                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} nullLabel="Uncategorized" />
-                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} nullLabel="No Product" />
-                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} nullLabel="No PSS" />
-                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} nullLabel="No Group" />
+                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
+                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
+                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
+                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
              </div>
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION */}
-        {/* UPDATE: Hapus pengecekan '!loading' agar grafik tidak hilang saat refresh */}
+        {/* 2. CHARTS SECTION (Sama) */}
         {chartData.length > 0 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-0">
                 
@@ -668,7 +669,7 @@ export default function PivotPage() {
                         {/* Spinner kecil opsional agar user tahu sedang proses */}
                         <div className="bg-white px-3 py-2 rounded-lg shadow-md border border-slate-100 flex items-center gap-2">
                             <RefreshCcw className="animate-spin text-blue-600" size={16} />
-                            <span className="text-[10px] font-bold text-slate-500">Updating...</span>
+                    <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
                         </div>
                      </div>
                 )}
