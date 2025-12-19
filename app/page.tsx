@@ -661,10 +661,10 @@ export default function PivotPage() {
                 <MultiSelect label="Tahun" options={filterOptions.year} selected={selectedYears} onChange={setSelectedYears} />
                 <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
                 <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
-                <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                <MultiSelect label="Business Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
              </div>
              <div className="flex flex-wrap gap-2">
-                <MultiSelect label="Key Acc." options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
+                <MultiSelect label="Key Account" options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
                 <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
                 <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
                 <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
