@@ -464,7 +464,7 @@ export default function PivotPage() {
   // Selected Filter Values
   const [selectedYears, setSelectedYears] = useState<string[]>(['All'])
   const [selectedMonths, setSelectedMonths] = useState<string[]>(['All']) 
-  const [selectedAreas, setSelectedAreas] = useState<string[]>(['All'])
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(['POWER AGCON'])
   const [selectedBusinessAreas, setSelectedBusinessAreas] = useState<string[]>(['All'])
   const [selectedPSS, setSelectedPSS] = useState<string[]>(['All'])
   const [selectedKAT, setSelectedKAT] = useState<string[]>(['All'])
@@ -473,6 +473,7 @@ export default function PivotPage() {
 
   // Dynamic Options
   const [filterOptions, setFilterOptions] = useState({
+    year: [] as string[], // Data tahun akan masuk ke sini
     months: [] as string[],
     areas: [] as string[],
     business_areas: [] as string[],
@@ -482,7 +483,9 @@ export default function PivotPage() {
     cust_groups: [] as string[],
   })
   
-  const [optionYears, setOptionYears] = useState<string[]>([])
+  // HAPUS BARIS INI (optionYears) KARENA TIDAK DIPAKAI LAGI
+  // const [optionYears, setOptionYears] = useState<string[]>([]) 
+  
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
   // -- UPDATE DISINI: Define active levels untuk diteruskan ke hook --
@@ -501,15 +504,6 @@ export default function PivotPage() {
 // ============================================================================
 // SECTION 7: DATA FETCHING & EFFECTS
 // ============================================================================
-  
-  // 7.1 Fetch Initial Years (Static)
-  useEffect(() => {
-    const fetchYears = async () => {
-       const { data } = await supabase.from('filter_cache').select('value').eq('type', 'year')
-       if(data) setOptionYears(data.map(d => d.value).sort())
-    }
-    fetchYears()
-  }, [])
 
   // 7.2 Fetch Dynamic Filters & Main Data
   useEffect(() => {
@@ -542,6 +536,7 @@ export default function PivotPage() {
         if (error) throw error
         if (data) {
            setFilterOptions({
+             year: data.year || [], 
              months: data.month || [],
              areas: data.area || [],
              business_areas: data.business_area || [],
@@ -663,7 +658,7 @@ export default function PivotPage() {
 
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
              <div className="flex flex-wrap gap-2">
-                <MultiSelect label="Tahun" options={optionYears} selected={selectedYears} onChange={setSelectedYears} />
+                <MultiSelect label="Tahun" options={filterOptions.year} selected={selectedYears} onChange={setSelectedYears} />
                 <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
                 <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
                 <MultiSelect label="Biz Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
@@ -702,78 +697,78 @@ export default function PivotPage() {
                 </div>
                 
                 <div className="flex-1 w-full min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                        {/* Margin bottom diperbesar sedikit lagi ke 20 agar label X aman */}
-                        <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis 
-                                dataKey="name" 
-                                tick={{fontSize: 11, fill: '#64748b'}} 
-                                axisLine={false} 
-                                tickLine={false} 
-                                tickMargin={10}
-                            />
-                            <YAxis 
-                                tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} 
-                                tick={{fontSize: 10, fill: '#64748b'}} 
-                                axisLine={false} 
-                                tickLine={false} 
-                                width={60} 
-                            />
-                            
-                            {/* Tooltip (Kode sebelumnya sudah benar, pastikan bagian ini sama) */}
-                            <Tooltip 
-                                cursor={{fill: '#f8fafc'}} 
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                        const total = payload.reduce((acc: number, p: any) => acc + (p.value || 0), 0)
-                                        return (
-                                            <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50 min-w-45">
-                                                <div className="font-bold text-slate-800 mb-1 border-b border-slate-100 pb-1">{label}</div>
-                                                <div className="flex flex-col gap-1 mb-2">
-                                                    {payload.slice().reverse().map((entry: any) => (
-                                                        entry.value > 0 && (
-                                                            <div key={entry.name} className="flex items-center justify-between gap-3 text-[10px]">
-                                                                <span className="flex items-center gap-1">
-                                                                    <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
-                                                                    {entry.name}
-                                                                </span>
-                                                                <span className="font-mono">
-                                                                    {entry.value >= 1000000000 
-                                                                        ? (entry.value/1000000000).toFixed(1)+' M' 
-                                                                        : (entry.value/1000000).toFixed(0)+' jt'}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    ))}
-                                                </div>
-                                                
-                                                {/* Total dengan Layout Justify Between (Penyelesaian masalah "Nempel") */}
-                                                <div className="flex justify-between items-center w-full border-t border-slate-100 pt-2 mt-2">
-                                                    <span className="font-bold text-slate-600">Total</span>
-                                                    <span className="font-bold text-indigo-700">Rp {total.toLocaleString('id-ID')}</span>
-                                                </div>
-                                            </div>
-                                        )
-                                    }
-                                    return null
-                                }} 
-                            />
-                            
-                            {MONTH_OPTIONS.map((month, index) => (
-                                <Bar 
-                                    key={month.value}
-                                    dataKey={month.value}
-                                    name={month.label}
-                                    stackId="a"
-                                    fill={MONTH_COLORS[index]} 
-                                    barSize={40}
-                                    radius={[0, 0, 0, 0]}
-                                />
-                            ))}
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                      {/* Margin left dikembalikan ke 0 karena axis Y sudah kecil lagi */}
+                      <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          
+                          <XAxis 
+                              dataKey="name" 
+                              tick={{fontSize: 11, fill: '#64748b'}} 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tickMargin={10}
+                          />
+
+                          {/* REVISI: Y-Axis DIBIARKAN SEPERTI SEMULA (Singkatan M/jt) */}
+                          <YAxis 
+                              tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} 
+                              tick={{fontSize: 10, fill: '#64748b'}} 
+                              axisLine={false} 
+                              tickLine={false} 
+                              width={60} 
+                          />
+                          
+                          <Tooltip 
+                              cursor={{fill: '#f8fafc'}} 
+                              content={({ active, payload, label }) => {
+                                  if (active && payload && payload.length) {
+                                      const total = payload.reduce((acc: number, p: any) => acc + (p.value || 0), 0)
+                                      return (
+                                          <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50 min-w-45">
+                                              <div className="font-bold text-slate-800 mb-1 border-b border-slate-100 pb-1">{label}</div>
+                                              <div className="flex flex-col gap-1 mb-2">
+                                                  {payload.slice().reverse().map((entry: any) => (
+                                                      entry.value > 0 && (
+                                                          <div key={entry.name} className="flex items-center justify-between gap-3 text-[10px]">
+                                                              <span className="flex items-center gap-1">
+                                                                  <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
+                                                                  {entry.name}
+                                                              </span>
+                                                              <span className="font-mono">
+                                                                  {/* TOOLTIP TETAP ANGKA PENUH */}
+                                                                  Rp {entry.value.toLocaleString('id-ID')}
+                                                              </span>
+                                                          </div>
+                                                      )
+                                                  ))}
+                                              </div>
+                                              
+                                              <div className="flex justify-between items-center w-full border-t border-slate-100 pt-2 mt-2">
+                                                  <span className="font-bold text-slate-600">Total</span>
+                                                  <span className="font-bold text-indigo-700">Rp {total.toLocaleString('id-ID')}</span>
+                                              </div>
+                                          </div>
+                                      )
+                                  }
+                                  return null
+                              }} 
+                          />
+                          
+                          {MONTH_OPTIONS.map((month, index) => (
+                              <Bar 
+                                  key={month.value}
+                                  dataKey={month.value}
+                                  name={month.label}
+                                  stackId="a"
+                                  fill={MONTH_COLORS[index]} 
+                                  barSize={40}
+                                  radius={[0, 0, 0, 0]}
+                              />
+                          ))}
+                      </BarChart>
+                  </ResponsiveContainer>
+              </div>
             </div>
         )}
 
