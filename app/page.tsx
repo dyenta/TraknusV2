@@ -7,52 +7,35 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
   LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
   ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
-  Maximize, Search, X, BarChart3, LogOut, // <--- Added LogOut Icon
-  Calendar, CalendarRange 
+  Maximize, Search, X, BarChart3, LogOut
 } from 'lucide-react'
-
-// --- AUTH IMPORTS BARU ---
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
-
 import { 
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts'
 
 // ============================================================================
-// SECTION 2: TYPES & INTERFACES (TIDAK BERUBAH)
+// SECTION 2: TYPES
 // ============================================================================
 export interface AggregatedRecord {
-  year: number;
-  month: number;
-  col_label_1: string;
-  col_label_2: string;
-  col_label_3: string;
-  col_label_4: string; 
+  year: number; month: number;
+  col_label_1: string; col_label_2: string; col_label_3: string; col_label_4: string; 
   total_amount: number;
 }
 
 export interface PivotNode {
-  id: string;          
-  label: string;       
-  level: number;       
-  isLeaf: boolean;     
-  values: Record<string, number>; 
-  rowTotal: number;    
-  children?: PivotNode[]; 
+  id: string; label: string; level: number; isLeaf: boolean;     
+  values: Record<string, number>; rowTotal: number; children?: PivotNode[]; 
 }
 
 // ============================================================================
-// SECTION 3: CONSTANTS (TIDAK BERUBAH)
+// SECTION 3: CONSTANTS
 // ============================================================================
 export const DIMENSION_OPTIONS = [
-  { label: '(None)', value: '' }, 
-  { label: 'Business Area', value: 'business_area' },
-  { label: 'PSS', value: 'pss' },
-  { label: 'Key Account Type', value: 'key_account_type' },
-  { label: 'Customer Group', value: 'cust_group' },
-  { label: 'Product', value: 'product' },
+  { label: '(None)', value: '' }, { label: 'Business Area', value: 'business_area' },
+  { label: 'PSS', value: 'pss' }, { label: 'Key Account Type', value: 'key_account_type' },
+  { label: 'Customer Group', value: 'cust_group' }, { label: 'Product', value: 'product' },
   { label: 'Area', value: 'area' }
 ]
 
@@ -63,37 +46,28 @@ export const MONTH_OPTIONS = [
     { label: 'Okt', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Des', value: '12' }
 ]
 
-const MONTH_COLORS = [
-    "#4338ca", "#4f46e5", "#5156cf", "#5a5ee0", "#6366f1", "#6d78e9",
-    "#7782f0", "#818cf8", "#8795f3", "#919ff6", "#9baaf9", "#a5b4fc"
-]
+const MONTH_COLORS = ["#4338ca", "#4f46e5", "#5156cf", "#5a5ee0", "#6366f1", "#6d78e9", "#7782f0", "#818cf8", "#8795f3", "#919ff6", "#9baaf9", "#a5b4fc"]
 
 // ============================================================================
-// SECTION 4: UI SUB-COMPONENTS (TIDAK BERUBAH)
+// SECTION 4: SUB-COMPONENTS
 // ============================================================================
-
-// --- 4.1 YoYBadge ---
-export function YoYBadge({ current, previous }: { current: number, previous: number }) {
+function YoYBadge({ current, previous }: { current: number, previous: number }) {
     if (previous === 0) return null;
-    const diff = current - previous
-    const percent = (diff / previous) * 100
-    const isUp = percent > 0
-    const isNeutral = percent === 0
+    const diff = current - previous, percent = (diff / previous) * 100
+    const isUp = percent > 0, isNeutral = percent === 0
     if (current === 0) return <span className="text-[9px] text-slate-300">-</span>
-
     return (
-        <div className={`flex items-center gap-[0.2em] text-[0.7em] font-bold px-[0.5em] py-0 rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500 border-slate-200' : ''} ${isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''} ${!isUp && !isNeutral ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}`}>
-            {isUp ? <ArrowUp style={{ width: '0.8em', height: '0.8em'}} /> : (!isNeutral && <ArrowDown style={{ width: '0.8em', height: '0.8em'}} />)}
+        <div className={`flex items-center gap-[0.2em] text-[0.7em] font-bold px-[0.5em] rounded-full border shadow-sm ${isNeutral ? 'bg-slate-100 text-slate-500' : isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+            {isUp ? <ArrowUp style={{width:'0.8em',height:'0.8em'}}/> : (!isNeutral && <ArrowDown style={{width:'0.8em',height:'0.8em'}}/>)}
             <span>{Math.abs(percent).toFixed(1)}%</span>
         </div>
     )
 }
 
-// --- 4.2 ControlBox ---
-export function ControlBox({ label, value, onChange, options, color }: any) {
+function ControlBox({ label, value, onChange, options, color }: any) {
     return (
         <div className={`bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 transition-colors`}>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-${color}-50 text-${color}-700 whitespace-nowrap shrink-0`}>{label}</span>
+            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-${color}-50 text-${color}-700 shrink-0`}>{label}</span>
             <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 w-full focus:outline-none cursor-pointer py-1 min-w-12.5 truncate">
                 {options.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
@@ -101,150 +75,70 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- 4.3 MultiSelect ---
-interface MultiSelectProps {
-    label: string;
-    options?: (string | null | number)[];
-    optionsRaw?: { label: string, value: string }[];
-    selected: string[];
-    onChange: (val: string[]) => void;
-}
-
-export function MultiSelect({ label, options, optionsRaw, selected, onChange }: MultiSelectProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("") 
-  const dropdownRef = useRef<HTMLDivElement>(null)
+function MultiSelect({ label, options, optionsRaw, selected, onChange }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   const finalOptions = useMemo(() => {
     if (optionsRaw) return optionsRaw;
-    if (options) {
-        return options.map(o => {
-            const isNullOrEmpty = o === null || o === undefined || String(o).trim() === '';
-            const displayLabel = isNullOrEmpty ? `No ${label}` : String(o);
-            return { label: displayLabel, value: isNullOrEmpty ? "" : String(o) }
-        })
-    }
-    return []
-  }, [options, optionsRaw, label]) 
-  
-  const filteredOptions = finalOptions.filter(opt => {
-    const labelText = opt.label || ""; 
-    return labelText.toLowerCase().includes(searchTerm.toLowerCase())
-  })
+    return (options || []).map((o: any) => ({ 
+        label: !o || String(o).trim() === '' ? `No ${label}` : String(o), 
+        value: !o || String(o).trim() === '' ? "" : String(o) 
+    }))
+  }, [options, optionsRaw, label]);
+
+  const filtered = finalOptions.filter((o:any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
   
   useEffect(() => {
-    function handleClickOutside(event: any) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false)
-        setSearchTerm("") 
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-  
-  const isAllSelected = selected.includes('All') || (finalOptions.length > 0 && selected.length === finalOptions.length)
-  
-  const toggleOption = (val: string) => {
-    if (val === 'All') {
-        onChange(isAllSelected ? [] : ['All'])
-    } else {
-      let newSelected = [...selected]
-      if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
-      
-      if (newSelected.includes(val)) {
-          newSelected = newSelected.filter(item => item !== val)
-      } else {
-          newSelected.push(val)
-      }
-      
-      if (newSelected.length === finalOptions.length && finalOptions.length > 0) onChange(['All'])
-      else onChange(newSelected)
-    }
-  }
+    const clickOut = (e: any) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) { setIsOpen(false); setSearchTerm(""); } }
+    document.addEventListener("mousedown", clickOut); return () => document.removeEventListener("mousedown", clickOut);
+  }, []);
 
-  const getDisplayLabel = () => {
-      if (selected.includes('All')) return 'All'
-      if (selected.length === 0) return 'None'
-      const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "")
-
-      if (isNumeric) {
-          const sortedIndices = selected.map(val => parseInt(val)).sort((a, b) => a - b)
-          const ranges: string[] = []
-          let start = sortedIndices[0], prev = sortedIndices[0]
-          for (let i = 1; i < sortedIndices.length; i++) {
-              const current = sortedIndices[i]
-              if (current === prev + 1) prev = current
-              else {
-                  const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
-                  const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
-                  ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
-                  start = current; prev = current
-              }
-          }
-          const startLabel = finalOptions.find(o => parseInt(o.value) === start)?.label
-          const endLabel = finalOptions.find(o => parseInt(o.value) === prev)?.label
-          if (startLabel) ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
-          return ranges.join(', ')
-      } 
-      const names = selected.map(val => finalOptions.find(o => o.value === val)?.label).filter(Boolean)
-      if (names.length > 2) return `${names[0]}, ${names[1]} +${names.length - 2}`
-      return names.join(', ')
+  const toggle = (val: string) => {
+    if (val === 'All') onChange(selected.includes('All') ? [] : ['All']);
+    else {
+      let newSel = selected.includes('All') ? finalOptions.map((o:any)=>o.value) : [...selected];
+      newSel = newSel.includes(val) ? newSel.filter((i:string)=>i!==val) : [...newSel, val];
+      onChange((newSel.length === finalOptions.length && finalOptions.length > 0) ? ['All'] : newSel);
+    }
+  };
+  
+  const display = () => {
+    if (selected.includes('All')) return 'All';
+    if (!selected.length) return 'None';
+    const names = selected.map((v:string) => finalOptions.find((o:any)=>o.value===v)?.label).filter(Boolean);
+    return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length-2}` : names.join(', ');
   }
   
   return (
     <div className="relative" ref={dropdownRef}>
        <div className="flex flex-col">
-         <label className="text-[10px] font-bold text-slate-400 ml-1 mb-0.5 uppercase tracking-wider">{label}</label>
-         <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm transition-all ${isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
-            <span className="truncate font-medium text-slate-700 block max-w-25 md:max-w-35 text-left">{getDisplayLabel()}</span>
+         <label className="text-[10px] font-bold text-slate-400 ml-1 mb-0.5 uppercase">{label}</label>
+         <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white border rounded-md shadow-sm ${isOpen ? 'border-blue-500 ring-1' : 'border-slate-200'}`}>
+            <span className="truncate font-medium text-slate-700 max-w-25 text-left">{display()}</span>
             <ChevronDown size={14} className="text-slate-400 shrink-0" />
          </button>
        </div>
-       
        {isOpen && (
-         <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1 flex flex-col">
+         <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border rounded-lg shadow-xl z-50 p-1 flex flex-col">
+            {/* PERBAIKAN DI SINI: Menghapus 'relative' agar tidak bentrok dengan 'sticky' */}
             <div className="sticky top-0 bg-white z-20 pb-1 border-b border-slate-100 p-2">
-                <div className="relative flex items-center">
-                    <Search size={12} className="absolute left-2 text-slate-400" />
-                    <input 
-                        type="text" placeholder={`Cari ${label}...`}
-                        className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:outline-none focus:border-blue-500 transition-colors"
-                        value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus
-                    />
-                    {searchTerm && (
-                        <button onClick={() => setSearchTerm("")} className="absolute right-2 text-slate-400 hover:text-slate-600"><X size={12} /></button>
-                    )}
-                </div>
+                <Search size={12} className="absolute left-4 top-4 text-slate-400" />
+                <input type="text" placeholder="Cari..." className="w-full pl-7 pr-6 py-1.5 text-xs border rounded bg-slate-50" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} autoFocus />
+                {searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-3 top-3.5 text-slate-400"><X size={12}/></button>}
             </div>
-
             <div className="overflow-y-auto max-h-60 pt-1">
-                {!searchTerm && (
-                    <div onClick={() => toggleOption('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100 mb-1">
-                        <div className={`w-3 h-3 rounded border flex items-center justify-center ${isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                            {isAllSelected && <Check size={8} className="text-white" />}
+                {!searchTerm && <div onClick={()=>toggle('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-bold border-b border-slate-100"><div className={`w-3 h-3 rounded border flex items-center justify-center ${selected.includes('All')?'bg-blue-600 border-blue-600':'border-slate-300'}`}>{selected.includes('All')&&<Check size={8} className="text-white"/>}</div>Select All</div>}
+                {filtered.length ? filtered.map((o:any) => {
+                    const isSel = selected.includes(o.value) || selected.includes('All');
+                    return (
+                        <div key={o.value||'empty'} onClick={()=>toggle(o.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
+                            <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSel?'bg-blue-600 border-blue-600':'border-slate-300'}`}>{isSel&&<Check size={8} className="text-white"/>}</div>
+                            <span className={`${isSel?'font-semibold text-slate-800':'text-slate-600'} ${o.value===""?'italic text-red-500':''}`}>{o.label}</span>
                         </div>
-                        Select All
-                    </div>
-                )}
-                {filteredOptions.length > 0 ? (
-                    filteredOptions.map(opt => {
-                        const isSelected = selected.includes(opt.value) || selected.includes('All')
-                        const isNone = opt.value === "" 
-                        return (
-                            <div key={opt.value || 'empty-key'} onClick={() => toggleOption(opt.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 rounded text-xs">
-                                <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                                    {isSelected && <Check size={8} className="text-white" />}
-                                </div>
-                                <span className={`${isSelected ? 'font-semibold text-slate-800' : 'text-slate-600'} ${isNone ? 'italic text-red-500 font-medium' : ''}`}>
-                                    {opt.label}
-                                </span>
-                            </div>
-                        )
-                    })
-                ) : (
-                    <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Tidak ada hasil "{searchTerm}"</div>
-                )}
+                    )
+                }) : <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Nihil</div>}
             </div>
          </div>
        )}
@@ -253,346 +147,140 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
 }
 
 // ============================================================================
-// SECTION 5: CUSTOM HOOKS (TIDAK BERUBAH)
+// SECTION 5: LOGIC HOOKS
 // ============================================================================
-interface UsePivotLogicProps {
-  data: AggregatedRecord[];
-  expandedCols: Record<string, boolean>;
-  expandedRows: Record<string, boolean>;
-  activeLevels: string[]; 
-}
-
-export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: UsePivotLogicProps) {
-  const pivotData = useMemo(() => {
-    const uniqueYearsSet = new Set<string>()
-    data.forEach(d => uniqueYearsSet.add(String(d.year)))
-    const sortedYears = Array.from(uniqueYearsSet).sort()
-
-    const finalColKeys: string[] = []
-    sortedYears.forEach(year => {
-        if (expandedCols[year]) {
-            const monthsInYear = new Set<number>()
-            data.filter(d => String(d.year) === year).forEach(d => monthsInYear.add(d.month))
-            const sortedMonths = Array.from(monthsInYear).sort((a,b) => a - b)
-            sortedMonths.forEach(m => finalColKeys.push(`${year}-${m < 10 ? '0'+m : m}`))
-            finalColKeys.push(`${year}-Total`)
-        } else {
-            finalColKeys.push(year)
-        }
-    })
-
-    const colTotals: Record<string, number> = {}
-    let grandTotal = 0
-    const rootMap: Record<string, PivotNode> = {}
-
-    for (const item of data) {
-      const yearStr = String(item.year)
-      const monthStr = item.month < 10 ? `0${item.month}` : String(item.month)
-      const val = item.total_amount || 0
-      const keysToUpdate = [yearStr, `${yearStr}-${monthStr}`, `${yearStr}-Total`]
-
-      grandTotal += val
-      for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
-      
-      const cleanLevels: string[] = []
-      activeLevels.forEach((lvlName, idx) => {
-          const rawVal = (item as any)[`col_label_${idx + 1}`]
-          if (rawVal === null || rawVal === undefined || String(rawVal).trim() === '') {
-             const friendlyName = lvlName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-             cleanLevels.push(`No ${friendlyName}`)
-          } else {
-             cleanLevels.push(String(rawVal))
-          }
-      })
-
-      if (cleanLevels.length === 0) continue
-
-      let currentMap = rootMap
-      let currentIdPath = ""
-
-      cleanLevels.forEach((lvlLabel, idx) => {
-        const isLastLevel = idx === cleanLevels.length - 1
-        currentIdPath = currentIdPath ? `${currentIdPath}|${lvlLabel}` : lvlLabel
-        
-        if (!currentMap[lvlLabel]) {
-            currentMap[lvlLabel] = {
-                id: currentIdPath, label: lvlLabel, level: idx, isLeaf: isLastLevel, values: {}, rowTotal: 0,
-            }
-        }
-        
-        const node = currentMap[lvlLabel]
-        for (const k of keysToUpdate) node.values[k] = (node.values[k] || 0) + val
-        node.rowTotal += val
-
-        if (!isLastLevel) {
-            if (!(node as any).childrenMap) { (node as any).childrenMap = {} }
-            currentMap = (node as any).childrenMap
-        }
-      })
-    }
-
-    const processChildren = (map: Record<string, PivotNode>): PivotNode[] => {
-        return Object.values(map)
-            .sort((a, b) => {
-                if(a.label.startsWith("No ") && !b.label.startsWith("No ")) return 1;
-                if(!a.label.startsWith("No ") && b.label.startsWith("No ")) return -1;
-                return a.label.localeCompare(b.label)
-            })
-            .map(node => {
-                if ((node as any).childrenMap) {
-                    node.children = processChildren((node as any).childrenMap)
-                    delete (node as any).childrenMap
-                }
-                return node
-            })
-    }
-
-    return { roots: processChildren(rootMap), colKeys: finalColKeys, colTotals, grandTotal }
-  }, [data, expandedCols, activeLevels])
-
-  const visibleRows = useMemo(() => {
-    const rows: PivotNode[] = []
-    const traverse = (nodes: PivotNode[]) => {
-        nodes.forEach(node => {
-            rows.push(node)
-            if (node.children && expandedRows[node.id]) traverse(node.children)
-        })
-    }
-    traverse(pivotData.roots)
-    return rows
-  }, [pivotData.roots, expandedRows])
-
-  const getHeaderInfo = (colKey: string) => {
-      if (colKey.includes('-Total')) {
-          const yearLabel = colKey.split('-')[0]
-          return { type: 'subtotal', label: yearLabel, parent: yearLabel } 
-      }
-      if (colKey.includes('-')) {
-          const [y, m] = colKey.split('-')
-          const mInt = parseInt(m)
-          const foundMonth = MONTH_OPTIONS.find(opt => opt.value === String(mInt))
-          const monthLabel = foundMonth ? foundMonth.label : String(mInt)
-          return { type: 'month', label: monthLabel, parent: y }
-      }
-      return { type: 'year', label: colKey, parent: colKey }
-  }
-
-  return { pivotData, visibleRows, getHeaderInfo }
-}
-
-export function useChartLogic(data: AggregatedRecord[]) {
+function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: any) {
   return useMemo(() => {
-    const trendMap: Record<string, any> = {}
-    data.forEach(item => {
-      const key = String(item.year)
-      const monthKey = String(item.month)
-      
-      if (!trendMap[key]) {
-        trendMap[key] = { name: key, year: item.year, total: 0 }
-      }
-      trendMap[key].total += item.total_amount
-      trendMap[key][monthKey] = (trendMap[key][monthKey] || 0) + item.total_amount
+    const uniqueYears = Array.from(new Set(data.map((d:any) => String(d.year)))).sort() as string[]
+    const finalColKeys: string[] = []
+    
+    uniqueYears.forEach(year => {
+        if (expandedCols[year]) {
+            const months = Array.from(new Set(data.filter((d:any)=>String(d.year)===year).map((d:any)=>d.month))).sort((a:any,b:any)=>a-b) as number[]
+            months.forEach(m => finalColKeys.push(`${year}-${m<10?'0'+m:m}`))
+            finalColKeys.push(`${year}-Total`)
+        } else finalColKeys.push(year)
     })
-    const trendData = Object.values(trendMap).sort((a: any, b: any) => a.year - b.year)
-    return { trendData }
-  }, [data])
+
+    const colTotals: Record<string, number> = {}, rootMap: Record<string, PivotNode> = {}
+    
+    for (const item of data) {
+      const yearStr = String(item.year), monthStr = item.month<10?`0${item.month}`:String(item.month), val = item.total_amount || 0
+      const keys = [yearStr, `${yearStr}-${monthStr}`, `${yearStr}-Total`]
+      keys.forEach(k => colTotals[k] = (colTotals[k] || 0) + val)
+      
+      const levels: string[] = activeLevels.map((l:string, idx:number) => {
+          const v = (item as any)[`col_label_${idx+1}`];
+          return (!v || String(v).trim()==='') ? `No ${l.replace('_',' ')}` : String(v)
+      })
+      if (!levels.length) continue
+
+      let map = rootMap, path = ""
+      levels.forEach((lvl, idx) => {
+        path = path ? `${path}|${lvl}` : lvl
+        if (!map[lvl]) map[lvl] = { id: path, label: lvl, level: idx, isLeaf: idx===levels.length-1, values: {}, rowTotal: 0 }
+        const node = map[lvl]
+        keys.forEach(k => node.values[k] = (node.values[k] || 0) + val)
+        node.rowTotal += val
+        if (!node.isLeaf) { if (!(node as any).childMap) (node as any).childMap = {}; map = (node as any).childMap }
+      })
+    }
+
+    const process = (map: any): PivotNode[] => Object.values(map).sort((a:any,b:any) => a.label.localeCompare(b.label)).map((n:any) => {
+        if (n.childMap) { n.children = process(n.childMap); delete n.childMap }
+        return n
+    })
+
+    const visibleRows: PivotNode[] = [];
+    const traverse = (nodes: PivotNode[]) => { nodes.forEach(n => { visibleRows.push(n); if(n.children && expandedRows[n.id]) traverse(n.children) }) }
+    traverse(process(rootMap))
+
+    const getHeaderInfo = (key: string) => {
+      if (key.includes('-Total')) return { type: 'subtotal', label: key.split('-')[0], parent: key.split('-')[0] } 
+      if (key.includes('-')) { const [y,m] = key.split('-'); return { type: 'month', label: MONTH_OPTIONS.find(o=>o.value===String(parseInt(m)))?.label, parent: y } }
+      return { type: 'year', label: key, parent: key }
+    }
+
+    return { pivotData: { colKeys: finalColKeys, colTotals }, visibleRows, getHeaderInfo }
+  }, [data, expandedCols, activeLevels])
 }
 
 // ============================================================================
 // SECTION 6: MAIN COMPONENT & STATE
 // ============================================================================
 export default function PivotPage() {
-  // --- AUTH SETUP: BARU ---
   const router = useRouter()
-  // Membuat instance supabase client yang aman untuk browser
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
-  )
-
-  const handleLogout = async () => {
-    // Proses logout
-    await supabase.auth.signOut()
-    router.refresh()
-    router.push('/login')
-  }
-  // -------------------------
+  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!)
 
   const [data, setData] = useState<AggregatedRecord[]>([])           
-  const [chartData, setChartData] = useState<AggregatedRecord[]>([]) 
+  const [chartData, setChartData] = useState<any[]>([]) 
+  const [loading, setLoading] = useState(true), [isRefreshing, setIsRefreshing] = useState(false)
   
-  const [loading, setLoading] = useState<boolean>(true)
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
+  // Filter States
+  const [lvl1, setLvl1] = useState('business_area'), [lvl2, setLvl2] = useState(''), [lvl3, setLvl3] = useState(''), [lvl4, setLvl4] = useState('')
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}), [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
+  const [zoom, setZoom] = useState(1)
 
-  // Filter State
-  const [lvl1, setLvl1] = useState<string>('business_area')
-  const [lvl2, setLvl2] = useState<string>('')
-  const [lvl3, setLvl3] = useState<string>('') 
-  const [lvl4, setLvl4] = useState<string>('') 
-
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
-  const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
-
-  // Selected Filter Values
-  const [selectedYears, setSelectedYears] = useState<string[]>(['All'])
-  const [selectedMonths, setSelectedMonths] = useState<string[]>(['All']) 
-  const [selectedAreas, setSelectedAreas] = useState<string[]>(['POWER AGCON'])
-  const [selectedBusinessAreas, setSelectedBusinessAreas] = useState<string[]>(['All'])
-  const [selectedPSS, setSelectedPSS] = useState<string[]>(['All'])
-  const [selectedKAT, setSelectedKAT] = useState<string[]>(['All'])
-  const [selectedCustGroups, setSelectedCustGroups] = useState<string[]>(['All'])
-  const [selectedProducts, setSelectedProducts] = useState<string[]>(['All'])
-
-  // Dynamic Options
-  const [filterOptions, setFilterOptions] = useState({
-    year: [] as string[],
-    months: [] as string[],
-    areas: [] as string[],
-    business_areas: [] as string[],
-    pss: [] as string[],
-    key_account_types: [] as string[],
-    products: [] as string[],
-    cust_groups: [] as string[],
-  })
+  const [selYears, setSelYears] = useState(['All']), [selMonths, setSelMonths] = useState(['All'])
+  const [selAreas, setSelAreas] = useState(['POWER AGCON']), [selBA, setSelBA] = useState(['All'])
+  const [selPSS, setSelPSS] = useState(['All']), [selKAT, setSelKAT] = useState(['All'])
+  const [selCG, setSelCG] = useState(['All']), [selProd, setSelProd] = useState(['All'])
   
-  const [zoomLevel, setZoomLevel] = useState<number>(1)
+  const [opts, setOpts] = useState({ year:[], months:[], areas:[], ba:[], pss:[], kat:[], products:[], cg:[] })
 
-  const activeLevels = useMemo(() => {
-     return [lvl1, lvl2, lvl3, lvl4].filter(l => l !== '')
-  }, [lvl1, lvl2, lvl3, lvl4])
-
-  // 1. Logic Pivot
-  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ 
-      data, expandedCols, expandedRows, activeLevels 
-  })
+  const activeLevels = useMemo(() => [lvl1, lvl2, lvl3, lvl4].filter(l => l !== ''), [lvl1, lvl2, lvl3, lvl4])
+  const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows, activeLevels })
   
-  // 2. Logic Chart
-  const { trendData } = useChartLogic(chartData)
+  const trendData = useMemo(() => {
+     const map:any = {}; chartData.forEach(i => {
+         const k = i.year; if(!map[k]) map[k] = { name: k, total: 0 };
+         map[k].total += i.total_amount; map[k][i.month] = (map[k][i.month]||0) + i.total_amount
+     }); return Object.values(map).sort((a:any,b:any)=>a.name-b.name)
+  }, [chartData])
 
 // ============================================================================
-// SECTION 7: DATA FETCHING & EFFECTS
+// SECTION 7: DATA FETCHING
 // ============================================================================
-
-  // 7.2 Fetch Dynamic Filters & Main Data
   useEffect(() => {
-    const fetchDynamicOptions = async () => {
-      try {
-        const getParam = (arr: string[]) => {
-            if (arr.includes('All')) return null;
-            if (arr.length === 0) return null; 
-            return arr[0]; 
-        }
-
-        const { data, error } = await supabase.rpc('get_dynamic_filter_options', {
-            p_year: getParam(selectedYears),
-            p_month: getParam(selectedMonths),
-            p_area: getParam(selectedAreas),
-            p_ba: getParam(selectedBusinessAreas),
-            p_pss: getParam(selectedPSS),
-            p_kat: getParam(selectedKAT),
-            p_cust_group: getParam(selectedCustGroups),
-            p_product: getParam(selectedProducts),
-        })
-
-        if (error) throw error
-        if (data) {
-           setFilterOptions({
-             year: data.year || [], 
-             months: data.month || [],
-             areas: data.area || [],
-             business_areas: data.business_area || [],
-             pss: data.pss || [],
-             key_account_types: data.key_account_type || [],
-             products: data.product || [],
-             cust_groups: data.cust_group || [],
-           })
-        }
-      } catch (err) { console.error("Dynamic Filter Error:", err) }
-    }
-
-    fetchDynamicOptions()
-    fetchAggregatedData() 
-  }, [
-    selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas, 
-    selectedPSS, selectedKAT, selectedCustGroups, selectedProducts,
-    lvl1, lvl2, lvl3, lvl4 
-  ]) 
-
-  // 7.3 Fetch Table & Chart Data Function
-  const fetchAggregatedData = async () => {
-    setLoading(true)
-    try {
-      let monthInts: number[] = []
-      if (!selectedMonths.includes('All')) monthInts = selectedMonths.map(m => parseInt(m))
-
-      const pivotPromise = supabase.rpc('get_sales_analytics', {
-        lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, 
-        filter_years: selectedYears,
-        filter_areas: selectedAreas,
-        filter_months: monthInts,
-        filter_business_areas: selectedBusinessAreas,
-        filter_pss: selectedPSS,
-        filter_key_account_types: selectedKAT,
-        filter_cust_groups: selectedCustGroups,
-        filter_products: selectedProducts
-      })
-
-      const chartPromise = supabase.rpc('get_sales_analytics', {
-        lvl1_field: 'product', 
-        lvl2_field: '', 
-        lvl3_field: '', 
-        lvl4_field: '', 
-        filter_years: selectedYears,
-        filter_areas: selectedAreas,
-        filter_months: monthInts,
-        filter_business_areas: selectedBusinessAreas,
-        filter_pss: selectedPSS,
-        filter_key_account_types: selectedKAT,
-        filter_cust_groups: selectedCustGroups,
-        filter_products: selectedProducts
-      })
-
-      const [pivotRes, chartRes] = await Promise.all([pivotPromise, chartPromise])
-
-      if (pivotRes.error) throw pivotRes.error
-      if (chartRes.error) throw chartRes.error
-
-      if (pivotRes.data) setData(pivotRes.data as AggregatedRecord[])
-      if (chartRes.data) setChartData(chartRes.data as AggregatedRecord[])
+    const fetchAll = async () => {
+      setLoading(true)
+      const getP = (arr:string[]) => (arr.includes('All') || !arr.length) ? null : arr[0]
+      const rpcArgs = { p_year: getP(selYears), p_month: getP(selMonths), p_area: getP(selAreas), p_ba: getP(selBA), p_pss: getP(selPSS), p_kat: getP(selKAT), p_cust_group: getP(selCG), p_product: getP(selProd) }
       
-    } catch (err: any) { console.error('Data Error:', err.message) } 
-    finally { setLoading(false) }
-  }
+      try {
+        const [optRes, dataRes, chartRes] = await Promise.all([
+           supabase.rpc('get_dynamic_filter_options', rpcArgs),
+           supabase.rpc('get_sales_analytics', { lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd }),
+           supabase.rpc('get_sales_analytics', { lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'', filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd })
+        ])
+        if (optRes.data) setOpts({ year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, ba: optRes.data.business_area, pss: optRes.data.pss, kat: optRes.data.key_account_type, products: optRes.data.product, cg: optRes.data.cust_group } as any)
+        if (dataRes.data) setData(dataRes.data)
+        if (chartRes.data) setChartData(chartRes.data)
+      } catch (e) { console.error(e) } finally { setLoading(false) }
+    }
+    fetchAll()
+  }, [selYears, selMonths, selAreas, selBA, selPSS, selKAT, selCG, selProd, lvl1, lvl2, lvl3, lvl4])
 
-  // Reset Row Expand when level changes
-  useEffect(() => { setExpandedRows({}) }, [lvl1, lvl2, lvl3, lvl4])
+  useEffect(() => setExpandedRows({}), [lvl1, lvl2, lvl3, lvl4])
 
 // ============================================================================
 // SECTION 8: EVENT HANDLERS
 // ============================================================================
-
-  const handleRefreshDatabase = async () => {
-    if(!confirm("Update Data dari Master? \n\nPERINGATAN: Proses ini mungkin memakan waktu lama (30-60+ detik).\nMohon jangan tutup browser sampai selesai.")) return;
+  const handleUpdate = async () => {
+    if(!confirm("Update Data dari Master?")) return;
     setIsRefreshing(true)
-    try {
-      const { error } = await supabase.rpc('refresh_sales_data')
-      if (error) throw error
-      await fetchAggregatedData()
-      alert('✅ Sukses! Data berhasil diperbarui dari Master.')
-    } catch (err: any) {
-      console.error('Refresh DB Error:', err)
-      if (err.message?.includes('timeout') || err.status === 504) {
-        alert('⚠️ Waktu Habis (Timeout Browser).\n\nDatabase mungkin masih memproses di latar belakang.')
-      } else {
-        alert('❌ Gagal: ' + (err.message || 'Terjadi kesalahan saat update.'))
-      }
-    } finally {
-      setIsRefreshing(false)
-    }
+    const { error } = await supabase.rpc('refresh_sales_data')
+    if (!error) { await supabase.auth.refreshSession(); alert('Sukses Update DB'); window.location.reload(); }
+    else alert('Gagal: '+error.message)
+    setIsRefreshing(false)
   }
 
-  const toggleRow = (id: string) => setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }))
-  const toggleCol = (year: string) => setExpandedCols(prev => ({ ...prev, [year]: !prev[year] }))
+  const handleLogout = async () => { 
+      await supabase.auth.signOut()
+      router.refresh()
+      router.push('/login') 
+  }
+  
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
 
 // ============================================================================
@@ -602,231 +290,120 @@ export default function PivotPage() {
     <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
       <div className="max-w-400 mx-auto space-y-4">
         
-        {/* 1. HEADER & FILTERS */}
+        {/* HEADER */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 z-50 relative">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <div className="flex flex-col">
-                <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800"><LayoutGrid className="text-blue-600" size={24} /> Sales Analytics</h1>
-                <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
+          <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
+            <div>
+                <h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600" size={24}/> Sales Analytics</h1>
+                <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Filters</p>
             </div>
-            
-            {/* ACTION BUTTONS (UPDATE DB + LOGOUT) */}
             <div className="flex items-center gap-2">
-                 <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm flex justify-center"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button>
-                
-                <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-                    <Database size={14} className={isRefreshing ? "animate-pulse" : ""} /> {isRefreshing ? 'Updating DB...' : 'Update DB'}
-                </button>
-
-                {/* --- LOGOUT BUTTON BARU --- */}
+                <button onClick={() => window.location.reload()} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button>
+                <button onClick={handleUpdate} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex gap-2"><Database size={14}/> {isRefreshing?'Updating...':'Update DB'}</button>
                 <div className="h-6 w-px bg-slate-300 mx-1"></div>
-                <button onClick={handleLogout} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded hover:bg-red-100 border border-red-100 flex items-center justify-center gap-2 shadow-sm transition-colors">
-                    <LogOut size={14} /> Logout
-                </button>
-                {/* -------------------------- */}
+                <button onClick={handleLogout} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded hover:bg-red-100 border border-red-100 flex gap-2"><LogOut size={14}/> Logout</button>
             </div>
           </div>
-
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
              <div className="flex flex-wrap gap-2">
-                <MultiSelect label="Tahun" options={filterOptions.year} selected={selectedYears} onChange={setSelectedYears} />
-                <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selectedMonths} onChange={setSelectedMonths} />
-                <MultiSelect label="Area" options={filterOptions.areas} selected={selectedAreas} onChange={setSelectedAreas} />
-                <MultiSelect label="Business Area" options={filterOptions.business_areas} selected={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                <MultiSelect label="Tahun" options={opts.year} selected={selYears} onChange={setSelYears} />
+                <MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selMonths} onChange={setSelMonths} />
+                <MultiSelect label="Area" options={opts.areas} selected={selAreas} onChange={setSelAreas} />
+                <MultiSelect label="Business Area" options={opts.ba} selected={selBA} onChange={setSelBA} />
              </div>
              <div className="flex flex-wrap gap-2">
-                <MultiSelect label="Key Account" options={filterOptions.key_account_types} selected={selectedKAT} onChange={setSelectedKAT} />
-                <MultiSelect label="Product" options={filterOptions.products} selected={selectedProducts} onChange={setSelectedProducts} />
-                <MultiSelect label="PSS" options={filterOptions.pss} selected={selectedPSS} onChange={setSelectedPSS} />
-                <MultiSelect label="Cust Group" options={filterOptions.cust_groups} selected={selectedCustGroups} onChange={setSelectedCustGroups} />
+                <MultiSelect label="Key Account" options={opts.kat} selected={selKAT} onChange={setSelKAT} />
+                <MultiSelect label="Product" options={opts.products} selected={selProd} onChange={setSelProd} />
+                <MultiSelect label="PSS" options={opts.pss} selected={selPSS} onChange={setSelPSS} />
+                <MultiSelect label="Cust Group" options={opts.cg} selected={selCG} onChange={setSelCG} />
              </div>
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (TIDAK BERUBAH) */}
+        {/* CHART */}
         {chartData.length > 0 && (
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-45">
-                {(loading || isRefreshing) && (
-                     <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl transition-all duration-200">
-                        <div className="bg-white px-3 py-2 rounded-lg shadow-md border border-slate-100 flex items-center gap-2">
-                            <RefreshCcw className="animate-spin text-blue-600" size={16} />
-                            <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
-                        </div>
-                     </div>
-                )}
-                <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
-                    <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={18}/></div>
-                    <div>
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Sales Performance</h3>
-                        <p className="text-[11px] text-slate-400">Total penjualan per Tahun (Yearly Trend)</p>
-                    </div>
-                </div>
-                <div className="flex-1 w-full min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} tickMargin={10} />
-                          <YAxis tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} tick={{fontSize: 10, fill: '#64748b'}} axisLine={false} tickLine={false} width={60} />
-                          <Tooltip cursor={{fill: '#f8fafc'}} content={({ active, payload, label }) => {
-                                  if (active && payload && payload.length) {
-                                      const total = payload.reduce((acc: number, p: any) => acc + (p.value || 0), 0)
-                                      return (
-                                          <div className="bg-white p-2.5 border border-slate-100 shadow-xl rounded-lg text-xs z-50 min-w-45">
-                                              <div className="font-bold text-slate-800 mb-1 border-b border-slate-100 pb-1">{label}</div>
-                                              <div className="flex flex-col gap-1 mb-2">
-                                                  {payload.slice().reverse().map((entry: any) => (
-                                                      entry.value > 0 && (
-                                                          <div key={entry.name} className="flex items-center justify-between gap-3 text-[10px]">
-                                                              <span className="flex items-center gap-1">
-                                                                  <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
-                                                                  {entry.name}
-                                                              </span>
-                                                              <span className="font-mono">Rp {entry.value.toLocaleString('id-ID')}</span>
-                                                          </div>
-                                                      )
-                                                  ))}
-                                              </div>
-                                              <div className="flex justify-between items-center w-full border-t border-slate-100 pt-2 mt-2">
-                                                  <span className="font-bold text-slate-600">Total</span>
-                                                  <span className="font-bold text-indigo-700">Rp {total.toLocaleString('id-ID')}</span>
-                                              </div>
-                                          </div>
-                                      )
-                                  }
-                                  return null
-                              }} 
-                          />
-                          {MONTH_OPTIONS.map((month, index) => (
-                              <Bar key={month.value} dataKey={month.value} name={month.label} stackId="a" fill={MONTH_COLORS[index]} barSize={40} radius={[0, 0, 0, 0]} />
-                          ))}
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm h-80 relative z-45 flex flex-col">
+                <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2"><BarChart3 size={18} className="text-indigo-600"/><span className="text-sm font-bold text-slate-700">SALES PERFORMANCE</span></div>
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{fontSize: 11, fill:'#64748b'}} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={v=>v>=1e9?(v/1e9).toFixed(1)+'M':(v/1e6).toFixed(0)} tick={{fontSize:10, fill:'#64748b'}} axisLine={false} tickLine={false} width={60} />
+                        <Tooltip cursor={{fill:'#f8fafc'}} content={({active, payload, label}) => active && payload && payload.length ? (
+                             <div className="bg-white p-2 border shadow-lg rounded text-xs z-50">
+                                <div className="font-bold mb-1 border-b pb-1">{label}</div>
+                                {payload.slice().reverse().map((e:any) => e.value>0 && <div key={e.name} className="flex justify-between gap-3 text-[10px]"><span>{e.name}</span><span className="font-mono">{e.value.toLocaleString('id-ID')}</span></div>)}
+                             </div>
+                        ) : null} />
+                        {MONTH_OPTIONS.map((m, i) => <Bar key={m.value} dataKey={m.value} name={m.label} stackId="a" fill={MONTH_COLORS[i]} barSize={40} />)}
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
         )}
 
-        {/* 3. CONTROLS (TIDAK BERUBAH) */}
+        {/* CONTROLS (COMPACT ZOOM) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
-              <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider"><Maximize size={16} /><span>Zoom View</span></div>
+              <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
-                  <ZoomOut size={14} className="text-slate-400" />
-                  <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))} className="w-24 md:w-32 cursor-pointer h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"/>
-                  <ZoomIn size={14} className="text-slate-400" />
-                  <span className="text-[10px] font-mono text-slate-500 w-8 text-right">{(zoomLevel * 100).toFixed(0)}%</span>
+                  <button onClick={()=>setZoom(p=>Math.max(0.4, Number((p-0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 flex justify-center active:scale-90"><ZoomOut size={14}/></button>
+                  <input type="range" min="0.4" max="1.5" step="0.1" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 rounded-lg appearance-none accent-blue-600"/>
+                  <button onClick={()=>setZoom(p=>Math.min(1.5, Number((p+0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 flex justify-center active:scale-90"><ZoomIn size={14}/></button>
+                  <span className="text-[10px] font-mono text-slate-500 w-8 text-right font-bold">{(zoom*100).toFixed(0)}%</span>
               </div>
            </div>
-           <div className="w-full flex flex-col md:flex-row items-center gap-3">
-               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0"><Layers size={16} /><span>Hierarki:</span></div>
-               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
-                 <ControlBox label="Lvl 1" value={lvl1} onChange={setLvl1} options={DIMENSION_OPTIONS} color="indigo" />
-                 <ControlBox label="Lvl 2" value={lvl2} onChange={setLvl2} options={DIMENSION_OPTIONS} color="indigo" />
-                 <ControlBox label="Lvl 3" value={lvl3} onChange={setLvl3} options={DIMENSION_OPTIONS} color="indigo" />
-                 <ControlBox label="Lvl 4" value={lvl4} onChange={setLvl4} options={DIMENSION_OPTIONS} color="indigo" />
-               </div>
+           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
+             {[lvl1, lvl2, lvl3, lvl4].map((v,i) => <ControlBox key={i} label={`Lvl ${i+1}`} value={v} onChange={i===0?setLvl1:i===1?setLvl2:i===2?setLvl3:setLvl4} options={DIMENSION_OPTIONS} color="indigo" />)}
            </div>
         </div>
 
-        {/* 4. TABLE DISPLAY (TIDAK BERUBAH) */}
+        {/* TABLE */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0">
-          {(loading || isRefreshing) && (
-             <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-                <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-slate-100 flex flex-col items-center gap-2">
-                    <RefreshCcw className="animate-spin text-blue-600" size={24} />
-                    <span className="text-xs font-semibold text-slate-600">{isRefreshing ? 'Memproses Database...' : 'Memuat Data...'}</span>
-                </div>
-             </div>
-          )}
-
+          {(loading || isRefreshing) && <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70"><RefreshCcw className="animate-spin text-blue-600" size={24}/></div>}
           <div className="overflow-auto flex-1 relative w-full">
-            <div style={{ fontSize: `${14 * zoomLevel}px` }} className="min-w-full inline-block align-top transition-all duration-200"> 
+            <div style={{fontSize: `${14*zoom}px`}} className="min-w-full inline-block align-top transition-all duration-200"> 
             <table className="w-full border-collapse leading-normal">
-              <thead className="bg-slate-50 text-slate-700-[inherit] sticky top-0 z-20 shadow-sm">
+              <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
-                  {pivotData.colKeys.map(colKey => {
-                    const info = getHeaderInfo(colKey)
-                    const isExpanded = expandedCols[info.parent]
-                    const showToggle = info.type === 'year' || info.type === 'subtotal'
-                    return (
-                        <th key={colKey} className={`p-2 text-center font-bold border-b border-slate-300 whitespace-nowrap min-w-[6em] ${info.type === 'year' ? 'bg-slate-100' : ''} ${info.type === 'subtotal' ? 'bg-slate-200 border-l border-slate-300' : ''} ${info.type === 'month' ? 'bg-white font-normal text-[0.9em] text-slate-500' : ''}`}>
-                            <div className="flex items-center justify-center gap-[0.5em]">
-                                {showToggle && (
-                                    <button onClick={() => toggleCol(info.parent)} className="hover:text-blue-600 transition focus:outline-none">
-                                        {isExpanded ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-red-500" /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} className="text-blue-600" />}
-                                    </button>
-                                )}
-                                <span>{info.label}</span>
-                            </div>
-                        </th>
-                    )
+                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
+                  {pivotData.colKeys.map(k => {
+                    const i = getHeaderInfo(k), show = i.type==='year'||i.type==='subtotal'
+                    return <th key={k} className={`p-2 text-center font-bold border-b border-slate-300 min-w-[6em] ${i.type==='year'?'bg-slate-100':i.type==='subtotal'?'bg-slate-200 border-l': 'bg-white font-normal text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1">
+                           {show && <button onClick={()=>setExpandedCols(p=>({...p,[i.parent]:!p[i.parent]}))} className="hover:text-blue-600">{expandedCols[i.parent]?<MinusSquare size="1.2em" className="text-red-500"/>:<PlusSquare size="1.2em" className="text-blue-600"/>}</button>}
+                           {i.label}
+                        </div>
+                    </th>
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-600-[inherit]">
-                {visibleRows.length > 0 ? visibleRows.map(node => (
-                    <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
+              <tbody className="divide-y divide-slate-100 text-slate-600">
+                {visibleRows.length > 0 ? visibleRows.map(n => (
+                    <tr key={n.id} className="hover:bg-blue-50 transition-colors">
                       <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 whitespace-nowrap">
-                        <div className="flex items-center gap-[0.5em]" style={{ paddingLeft: `${node.level * 1.5}em` }}>
-                            {!node.isLeaf ? (
-                                <button onClick={() => toggleRow(node.id)} className="text-slate-400 hover:text-blue-600 focus:outline-none">
-                                    {expandedRows[node.id] ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />}
-                                </button>
-                            ) : <span style={{ width: '1.2em' }} />}
-                            <span className={`${node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"} ${node.label.startsWith('No ') ? 'text-red-500 italic' : ''}`}>{node.label}</span>
+                        <div className="flex items-center gap-[0.5em]" style={{paddingLeft:`${n.level*1.5}em`}}>
+                            {!n.isLeaf ? <button onClick={()=>setExpandedRows(p=>({...p,[n.id]:!p[n.id]}))} className="text-slate-400 hover:text-blue-600">{expandedRows[n.id]?<MinusSquare size="1.2em"/>:<PlusSquare size="1.2em"/>}</button> : <span style={{width:'1.2em'}}/>}
+                            <span className={`${n.isLeaf?"text-slate-600":"font-bold text-slate-800"} ${n.label.startsWith('No ') ? 'text-red-500 italic' : ''}`}>{n.label}</span>
                         </div>
                       </td>
-                      {pivotData.colKeys.map(colKey => {
-                         const currentVal = node.values[colKey] || 0
-                         const info = getHeaderInfo(colKey)
-                         const isSubtotal = info.type === 'subtotal'
-                         
-                         let prevKey = ''
-                         const prevYear = (parseInt(info.parent) - 1).toString()
-                         if (info.type === 'year') prevKey = prevYear
-                         else if (info.type === 'month') prevKey = `${prevYear}-${colKey.split('-')[1]}`
-                         else if (info.type === 'subtotal') prevKey = `${prevYear}-Total`
-
-                         let prevVal = node.values[prevKey] || 0
-                         if (info.type === 'subtotal' && prevVal === 0) prevVal = node.values[prevYear] || 0
-
-                         return (
-                            <td key={colKey} className={`p-2 text-right border-r border-slate-100 align-top cursor-default whitespace-nowrap ${isSubtotal ? 'bg-slate-50 font-bold border-l border-slate-200' : ''}`}>
-                                <div className="flex flex-col items-end gap-0.5">
-                                    <span className={`font-mono text-[0.95em] ${currentVal ? 'text-slate-900' : 'text-slate-300'}`}>{fmt(currentVal)}</span>
-                                    {prevVal > 0 && <YoYBadge current={currentVal} previous={prevVal} />}
-                                </div>
-                            </td>
-                         )
+                      {pivotData.colKeys.map(k => {
+                         const val = n.values[k] || 0, i = getHeaderInfo(k), isSub = i.type==='subtotal'
+                         let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`
+                         let prev = n.values[prevK] || 0; if (isSub && prev===0) prev = n.values[(parseInt(i.parent)-1)+''] || 0
+                         return <td key={k} className={`p-2 text-right border-r border-slate-100 align-top ${isSub?'bg-slate-50 font-bold border-l border-slate-200':''}`}>
+                            <div className="flex flex-col items-end gap-0.5"><span className={val?'text-slate-900':'text-slate-300 font-mono'}>{fmt(val)}</span>{prev>0&&<YoYBadge current={val} previous={prev}/>}</div>
+                         </td>
                       })}
                     </tr>
-                )) : (
-                   <tr><td colSpan={20} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2"><Filter size={24} /><span>Data tidak ditemukan untuk kombinasi filter ini.</span></td></tr>
-                )}
+                )) : <tr><td colSpan={20} className="p-12 text-center text-slate-400"><Filter size={24} className="mx-auto mb-2"/>Data tidak ditemukan.</td></tr>}
               </tbody>
-              <tfoot className="bg-slate-100 font-bold text-slate-800-[inherit] sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-sm">
                 <tr>
-                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top"><div className="mt-[0.2em]">GRAND TOTAL</div></td>
-                    {pivotData.colKeys.map(colKey => {
-                        const info = getHeaderInfo(colKey)
-                        const currentTotal = pivotData.colTotals[colKey] || 0
-                        let prevKey = ''
-                        const prevYear = (parseInt(info.parent) - 1).toString()
-                        if (info.type === 'year') prevKey = prevYear
-                        else if (info.type === 'month') prevKey = `${prevYear}-${colKey.split('-')[1]}`
-                        else if (info.type === 'subtotal') prevKey = `${prevYear}-Total`
-
-                        let prevTotal = pivotData.colTotals[prevKey] || 0
-                        if (info.type === 'subtotal' && prevTotal === 0) prevTotal = pivotData.colTotals[prevYear] || 0
-
-                        return (
-                            <td key={colKey} className={`p-3 text-right border-t border-r border-slate-200 align-top whitespace-nowrap ${info.type === 'subtotal' ? 'bg-slate-200' : 'bg-slate-100'}`}>
-                                <div className="flex flex-col items-end gap-0.5">
-                                    <span className="font-mono text-[0.95em]">{fmt(currentTotal)}</span>
-                                    {prevTotal > 0 && <YoYBadge current={currentTotal} previous={prevTotal} />}
-                                </div>
-                            </td>
-                        )
+                    <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300">GRAND TOTAL</td>
+                    {pivotData.colKeys.map(k => {
+                        const i=getHeaderInfo(k), tot=pivotData.colTotals[k]||0; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`
+                        let prev = pivotData.colTotals[prevK] || 0; if (i.type==='subtotal' && prev===0) prev = pivotData.colTotals[(parseInt(i.parent)-1)+''] || 0
+                        return <td key={k} className={`p-3 text-right border-t border-r border-slate-200 ${i.type==='subtotal'?'bg-slate-200':''}`}><div className="flex flex-col items-end gap-0.5"><span className="font-mono">{fmt(tot)}</span>{prev>0&&<YoYBadge current={tot} previous={prev}/>}</div></td>
                     })}
                 </tr>
               </tfoot>
