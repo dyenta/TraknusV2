@@ -1,16 +1,19 @@
 'use client'
 
 // ============================================================================
-// SECTION 1: IMPORTS (TIDAK BERUBAH)
+// SECTION 1: IMPORTS
 // ============================================================================
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { 
   LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, 
   ArrowUp, ArrowDown, ChevronDown, Check, Layers, ZoomIn, ZoomOut, 
-  Maximize, Search, X, BarChart3, 
+  Maximize, Search, X, BarChart3, LogOut, // <--- Added LogOut Icon
   Calendar, CalendarRange 
 } from 'lucide-react'
-import { supabase } from '@/lib/supabaseClient'
+
+// --- AUTH IMPORTS BARU ---
+import { createBrowserClient } from '@supabase/ssr'
+import { useRouter } from 'next/navigation'
 
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -61,25 +64,15 @@ export const MONTH_OPTIONS = [
 ]
 
 const MONTH_COLORS = [
-    "#4338ca", // Jan (Paling Bawah - Gelap/Indigo 700)
-    "#4f46e5", 
-    "#5156cf",
-    "#5a5ee0",
-    "#6366f1", // Mei (Sedang)
-    "#6d78e9",
-    "#7782f0",
-    "#818cf8", // Agu
-    "#8795f3",
-    "#919ff6",
-    "#9baaf9",
-    "#a5b4fc"  // Des (Paling Atas - Terang/Indigo 300)
+    "#4338ca", "#4f46e5", "#5156cf", "#5a5ee0", "#6366f1", "#6d78e9",
+    "#7782f0", "#818cf8", "#8795f3", "#919ff6", "#9baaf9", "#a5b4fc"
 ]
 
 // ============================================================================
-// SECTION 4: UI SUB-COMPONENTS
+// SECTION 4: UI SUB-COMPONENTS (TIDAK BERUBAH)
 // ============================================================================
 
-// --- 4.1 YoYBadge (TIDAK BERUBAH) ---
+// --- 4.1 YoYBadge ---
 export function YoYBadge({ current, previous }: { current: number, previous: number }) {
     if (previous === 0) return null;
     const diff = current - previous
@@ -96,7 +89,7 @@ export function YoYBadge({ current, previous }: { current: number, previous: num
     )
 }
 
-// --- 4.2 ControlBox (TIDAK BERUBAH) ---
+// --- 4.2 ControlBox ---
 export function ControlBox({ label, value, onChange, options, color }: any) {
     return (
         <div className={`bg-white px-2 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 transition-colors`}>
@@ -108,7 +101,7 @@ export function ControlBox({ label, value, onChange, options, color }: any) {
     )
 }
 
-// --- 4.3 MultiSelect (DIUPDATE SEDIKIT) ---
+// --- 4.3 MultiSelect ---
 interface MultiSelectProps {
     label: string;
     options?: (string | null | number)[];
@@ -126,21 +119,14 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
     if (optionsRaw) return optionsRaw;
     if (options) {
         return options.map(o => {
-            // Logic: Data null/kosong/undefined akan dianggap sebagai kategori "No [Nama Filter]"
-            // Value-nya diset menjadi string kosong "" agar bisa difilter di DB
             const isNullOrEmpty = o === null || o === undefined || String(o).trim() === '';
             const displayLabel = isNullOrEmpty ? `No ${label}` : String(o);
-            
-            return { 
-                label: displayLabel, 
-                value: isNullOrEmpty ? "" : String(o)         
-            }
+            return { label: displayLabel, value: isNullOrEmpty ? "" : String(o) }
         })
     }
     return []
   }, [options, optionsRaw, label]) 
   
-  // ... (Sisa kode MultiSelect logika filtering dan click outside sama seperti sebelumnya)
   const filteredOptions = finalOptions.filter(opt => {
     const labelText = opt.label || ""; 
     return labelText.toLowerCase().includes(searchTerm.toLowerCase())
@@ -164,7 +150,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
         onChange(isAllSelected ? [] : ['All'])
     } else {
       let newSelected = [...selected]
-      // Jika sebelumnya All, maka anggap semua value terpilih, lalu kurangi yang di-klik
       if (newSelected.includes('All')) newSelected = finalOptions.map(o => o.value)
       
       if (newSelected.includes(val)) {
@@ -181,7 +166,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
   const getDisplayLabel = () => {
       if (selected.includes('All')) return 'All'
       if (selected.length === 0) return 'None'
-      
       const isNumeric = finalOptions.every(opt => !isNaN(parseInt(opt.value)) && opt.value !== "")
 
       if (isNumeric) {
@@ -203,7 +187,6 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
           if (startLabel) ranges.push(start === prev ? `${startLabel}` : `${startLabel}-${endLabel}`)
           return ranges.join(', ')
       } 
-      
       const names = selected.map(val => finalOptions.find(o => o.value === val)?.label).filter(Boolean)
       if (names.length > 2) return `${names[0]}, ${names[1]} +${names.length - 2}`
       return names.join(', ')
@@ -270,23 +253,21 @@ export function MultiSelect({ label, options, optionsRaw, selected, onChange }: 
 }
 
 // ============================================================================
-// SECTION 5: CUSTOM HOOKS (UPDATED LOGIC)
+// SECTION 5: CUSTOM HOOKS (TIDAK BERUBAH)
 // ============================================================================
 interface UsePivotLogicProps {
   data: AggregatedRecord[];
   expandedCols: Record<string, boolean>;
   expandedRows: Record<string, boolean>;
-  activeLevels: string[]; // [lvl1, lvl2, lvl3, lvl4] yang tidak kosong
+  activeLevels: string[]; 
 }
 
 export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: UsePivotLogicProps) {
-  
   const pivotData = useMemo(() => {
     const uniqueYearsSet = new Set<string>()
     data.forEach(d => uniqueYearsSet.add(String(d.year)))
     const sortedYears = Array.from(uniqueYearsSet).sort()
 
-    // A. Columns Logic (Sama seperti sebelumnya)
     const finalColKeys: string[] = []
     sortedYears.forEach(year => {
         if (expandedCols[year]) {
@@ -300,7 +281,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
         }
     })
 
-    // B. Tree Logic (DIUBAH DISINI)
     const colTotals: Record<string, number> = {}
     let grandTotal = 0
     const rootMap: Record<string, PivotNode> = {}
@@ -313,22 +293,11 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
 
       grandTotal += val
       for (const k of keysToUpdate) colTotals[k] = (colTotals[k] || 0) + val
-
-      // PERBAIKAN LOGIKA DISINI:
-      // Kita tidak lagi memfilter data kosong secara membabi buta.
-      // Kita cek berdasarkan 'activeLevels'. Jika user memilih Level 'PSS',
-      // tapi data PSS kosong, kita beri label 'No PSS' agar node-nya terbentuk.
       
       const cleanLevels: string[] = []
-      
       activeLevels.forEach((lvlName, idx) => {
-          // Ambil value dari col_label_1, col_label_2 dst
-          // Note: AggregatedRecord punya key fix col_label_1..4
           const rawVal = (item as any)[`col_label_${idx + 1}`]
-
           if (rawVal === null || rawVal === undefined || String(rawVal).trim() === '') {
-             // Jika data kosong, buat label deskriptif, misal "No PSS"
-             // Format teks lvlName (misal 'business_area' -> 'Business Area')
              const friendlyName = lvlName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
              cleanLevels.push(`No ${friendlyName}`)
           } else {
@@ -336,7 +305,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
           }
       })
 
-      // Jika tidak ada level yang dipilih sama sekali, skip row ini (seharusnya tidak terjadi)
       if (cleanLevels.length === 0) continue
 
       let currentMap = rootMap
@@ -366,7 +334,6 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
     const processChildren = (map: Record<string, PivotNode>): PivotNode[] => {
         return Object.values(map)
             .sort((a, b) => {
-                // Opsional: Taruh yang berawalan "No " di paling bawah atau atas
                 if(a.label.startsWith("No ") && !b.label.startsWith("No ")) return 1;
                 if(!a.label.startsWith("No ") && b.label.startsWith("No ")) return -1;
                 return a.label.localeCompare(b.label)
@@ -381,7 +348,7 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
     }
 
     return { roots: processChildren(rootMap), colKeys: finalColKeys, colTotals, grandTotal }
-  }, [data, expandedCols, activeLevels]) // Dependency ditambah activeLevels
+  }, [data, expandedCols, activeLevels])
 
   const visibleRows = useMemo(() => {
     const rows: PivotNode[] = []
@@ -416,28 +383,17 @@ export function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }
 export function useChartLogic(data: AggregatedRecord[]) {
   return useMemo(() => {
     const trendMap: Record<string, any> = {}
-    
     data.forEach(item => {
       const key = String(item.year)
-      const monthKey = String(item.month) // key untuk bulan: "1", "2", ... "12"
+      const monthKey = String(item.month)
       
       if (!trendMap[key]) {
-        trendMap[key] = { 
-            name: key, 
-            year: item.year, 
-            total: 0 
-            // Bulan akan otomatis ditambahkan dinamis di bawah
-        }
+        trendMap[key] = { name: key, year: item.year, total: 0 }
       }
-      // Akumulasi total tahunan
       trendMap[key].total += item.total_amount
-      
-      // Akumulasi per bulan spesifik untuk Stacked Bar
       trendMap[key][monthKey] = (trendMap[key][monthKey] || 0) + item.total_amount
     })
-
     const trendData = Object.values(trendMap).sort((a: any, b: any) => a.year - b.year)
-
     return { trendData }
   }, [data])
 }
@@ -446,6 +402,22 @@ export function useChartLogic(data: AggregatedRecord[]) {
 // SECTION 6: MAIN COMPONENT & STATE
 // ============================================================================
 export default function PivotPage() {
+  // --- AUTH SETUP: BARU ---
+  const router = useRouter()
+  // Membuat instance supabase client yang aman untuk browser
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
+  )
+
+  const handleLogout = async () => {
+    // Proses logout
+    await supabase.auth.signOut()
+    router.refresh()
+    router.push('/login')
+  }
+  // -------------------------
+
   const [data, setData] = useState<AggregatedRecord[]>([])           
   const [chartData, setChartData] = useState<AggregatedRecord[]>([]) 
   
@@ -473,7 +445,7 @@ export default function PivotPage() {
 
   // Dynamic Options
   const [filterOptions, setFilterOptions] = useState({
-    year: [] as string[], // Data tahun akan masuk ke sini
+    year: [] as string[],
     months: [] as string[],
     areas: [] as string[],
     business_areas: [] as string[],
@@ -483,17 +455,13 @@ export default function PivotPage() {
     cust_groups: [] as string[],
   })
   
-  // HAPUS BARIS INI (optionYears) KARENA TIDAK DIPAKAI LAGI
-  // const [optionYears, setOptionYears] = useState<string[]>([]) 
-  
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  // -- UPDATE DISINI: Define active levels untuk diteruskan ke hook --
   const activeLevels = useMemo(() => {
      return [lvl1, lvl2, lvl3, lvl4].filter(l => l !== '')
   }, [lvl1, lvl2, lvl3, lvl4])
 
-  // 1. Logic Pivot (Pass activeLevels)
+  // 1. Logic Pivot
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ 
       data, expandedCols, expandedRows, activeLevels 
   })
@@ -509,16 +477,9 @@ export default function PivotPage() {
   useEffect(() => {
     const fetchDynamicOptions = async () => {
       try {
-        // Logic getParam: Jika [''] (user pilih empty), return '' agar dikirim ke RPC sebagai empty string
         const getParam = (arr: string[]) => {
             if (arr.includes('All')) return null;
-            if (arr.length === 0) return null; // Harusnya tidak kejadian karena MultiSelect handle empty
-            // Jika single selection, kirim string-nya. Jika multiple, logic RPC mungkin beda, 
-            // tapi asumsi disini dynamic option based on single dominant filter usually, 
-            // atau array. Jika array, sesuaikan dengan RPC definition Anda.
-            // Asumsi get_dynamic_filter_options menerima array text[] atau text.
-            // Disini kita kirim array[0] untuk simplicity seperti kode asli, 
-            // tapi pastikan UI MultiSelect kirim array yang benar.
+            if (arr.length === 0) return null; 
             return arr[0]; 
         }
 
@@ -607,7 +568,7 @@ export default function PivotPage() {
   useEffect(() => { setExpandedRows({}) }, [lvl1, lvl2, lvl3, lvl4])
 
 // ============================================================================
-// SECTION 8: EVENT HANDLERS (Sama seperti sebelumnya)
+// SECTION 8: EVENT HANDLERS
 // ============================================================================
 
   const handleRefreshDatabase = async () => {
@@ -635,7 +596,7 @@ export default function PivotPage() {
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
 
 // ============================================================================
-// SECTION 9: JSX RENDER (TIDAK BERUBAH)
+// SECTION 9: JSX RENDER
 // ============================================================================
   return (
     <main className="min-h-screen bg-slate-50 p-2 md:p-6 font-sans text-slate-800">
@@ -648,11 +609,21 @@ export default function PivotPage() {
                 <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800"><LayoutGrid className="text-blue-600" size={24} /> Sales Analytics</h1>
                 <p className="text-xs text-slate-400 mt-1 ml-8">Dynamic Pivot & Searchable Filters</p>
             </div>
+            
+            {/* ACTION BUTTONS (UPDATE DB + LOGOUT) */}
             <div className="flex items-center gap-2">
                  <button onClick={fetchAggregatedData} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-100 shadow-sm flex justify-center"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button>
+                
                 <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                     <Database size={14} className={isRefreshing ? "animate-pulse" : ""} /> {isRefreshing ? 'Updating DB...' : 'Update DB'}
                 </button>
+
+                {/* --- LOGOUT BUTTON BARU --- */}
+                <div className="h-6 w-px bg-slate-300 mx-1"></div>
+                <button onClick={handleLogout} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded hover:bg-red-100 border border-red-100 flex items-center justify-center gap-2 shadow-sm transition-colors">
+                    <LogOut size={14} /> Logout
+                </button>
+                {/* -------------------------- */}
             </div>
           </div>
 
@@ -672,13 +643,9 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {/* 2. CHARTS SECTION (UPDATE DISINI) */}
+        {/* 2. CHARTS SECTION (TIDAK BERUBAH) */}
         {chartData.length > 0 && (
-            // PERUBAHAN 1: h-80 diubah jadi h-[450px] agar lebih lega untuk tooltip panjang
-            // PERUBAHAN 2: z-0 diubah jadi z-45 agar tooltip tampil DI ATAS container zoom/kontrol
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-80 relative z-45">
-                
-                {/* Overlay Loading (Tetap sama) */}
                 {(loading || isRefreshing) && (
                      <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl transition-all duration-200">
                         <div className="bg-white px-3 py-2 rounded-lg shadow-md border border-slate-100 flex items-center gap-2">
@@ -687,7 +654,6 @@ export default function PivotPage() {
                         </div>
                      </div>
                 )}
-
                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-2">
                     <div className="p-1.5 bg-indigo-50 rounded text-indigo-600"><BarChart3 size={18}/></div>
                     <div>
@@ -695,33 +661,13 @@ export default function PivotPage() {
                         <p className="text-[11px] text-slate-400">Total penjualan per Tahun (Yearly Trend)</p>
                     </div>
                 </div>
-                
                 <div className="flex-1 w-full min-h-0">
                   <ResponsiveContainer width="100%" height="100%">
-                      {/* Margin left dikembalikan ke 0 karena axis Y sudah kecil lagi */}
                       <BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          
-                          <XAxis 
-                              dataKey="name" 
-                              tick={{fontSize: 11, fill: '#64748b'}} 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tickMargin={10}
-                          />
-
-                          {/* REVISI: Y-Axis DIBIARKAN SEPERTI SEMULA (Singkatan M/jt) */}
-                          <YAxis 
-                              tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} 
-                              tick={{fontSize: 10, fill: '#64748b'}} 
-                              axisLine={false} 
-                              tickLine={false} 
-                              width={60} 
-                          />
-                          
-                          <Tooltip 
-                              cursor={{fill: '#f8fafc'}} 
-                              content={({ active, payload, label }) => {
+                          <XAxis dataKey="name" tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} tickMargin={10} />
+                          <YAxis tickFormatter={(val) => val >= 1000000000 ? (val/1000000000).toFixed(1)+'M' : (val/1000000).toFixed(0)} tick={{fontSize: 10, fill: '#64748b'}} axisLine={false} tickLine={false} width={60} />
+                          <Tooltip cursor={{fill: '#f8fafc'}} content={({ active, payload, label }) => {
                                   if (active && payload && payload.length) {
                                       const total = payload.reduce((acc: number, p: any) => acc + (p.value || 0), 0)
                                       return (
@@ -735,15 +681,11 @@ export default function PivotPage() {
                                                                   <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
                                                                   {entry.name}
                                                               </span>
-                                                              <span className="font-mono">
-                                                                  {/* TOOLTIP TETAP ANGKA PENUH */}
-                                                                  Rp {entry.value.toLocaleString('id-ID')}
-                                                              </span>
+                                                              <span className="font-mono">Rp {entry.value.toLocaleString('id-ID')}</span>
                                                           </div>
                                                       )
                                                   ))}
                                               </div>
-                                              
                                               <div className="flex justify-between items-center w-full border-t border-slate-100 pt-2 mt-2">
                                                   <span className="font-bold text-slate-600">Total</span>
                                                   <span className="font-bold text-indigo-700">Rp {total.toLocaleString('id-ID')}</span>
@@ -754,17 +696,8 @@ export default function PivotPage() {
                                   return null
                               }} 
                           />
-                          
                           {MONTH_OPTIONS.map((month, index) => (
-                              <Bar 
-                                  key={month.value}
-                                  dataKey={month.value}
-                                  name={month.label}
-                                  stackId="a"
-                                  fill={MONTH_COLORS[index]} 
-                                  barSize={40}
-                                  radius={[0, 0, 0, 0]}
-                              />
+                              <Bar key={month.value} dataKey={month.value} name={month.label} stackId="a" fill={MONTH_COLORS[index]} barSize={40} radius={[0, 0, 0, 0]} />
                           ))}
                       </BarChart>
                   </ResponsiveContainer>
@@ -772,9 +705,8 @@ export default function PivotPage() {
             </div>
         )}
 
-        {/* 3. CONTROLS (HIERARCHY & ZOOM) (TETAP Z-40, jadi Chart Z-45 akan menutupinya jika overlap) */}
+        {/* 3. CONTROLS (TIDAK BERUBAH) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center gap-3 relative z-40">
-           {/* Zoom Control */}
            <div className="w-full flex items-center justify-between border-b border-slate-100 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider"><Maximize size={16} /><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
@@ -784,8 +716,6 @@ export default function PivotPage() {
                   <span className="text-[10px] font-mono text-slate-500 w-8 text-right">{(zoomLevel * 100).toFixed(0)}%</span>
               </div>
            </div>
-
-           {/* Hierarchy Control */}
            <div className="w-full flex flex-col md:flex-row items-center gap-3">
                <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0 self-start md:self-center pt-2 md:pt-0"><Layers size={16} /><span>Hierarki:</span></div>
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">
@@ -797,7 +727,7 @@ export default function PivotPage() {
            </div>
         </div>
 
-        {/* 4. TABLE DISPLAY (Sama) */}
+        {/* 4. TABLE DISPLAY (TIDAK BERUBAH) */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0">
           {(loading || isRefreshing) && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
@@ -811,7 +741,7 @@ export default function PivotPage() {
           <div className="overflow-auto flex-1 relative w-full">
             <div style={{ fontSize: `${14 * zoomLevel}px` }} className="min-w-full inline-block align-top transition-all duration-200"> 
             <table className="w-full border-collapse leading-normal">
-              <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 shadow-sm text-[inherit]">
+              <thead className="bg-slate-50 text-slate-700-[inherit] sticky top-0 z-20 shadow-sm">
                 <tr>
                   <th className="p-3 text-left font-bold border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
                   {pivotData.colKeys.map(colKey => {
@@ -833,7 +763,7 @@ export default function PivotPage() {
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-600 text-[inherit]">
+              <tbody className="divide-y divide-slate-100 text-slate-600-[inherit]">
                 {visibleRows.length > 0 ? visibleRows.map(node => (
                     <tr key={node.id} className="hover:bg-blue-50 transition-colors group">
                       <td className="p-2 font-medium text-slate-800 border-r border-slate-200 bg-slate-50 sticky left-0 z-10 whitespace-nowrap">
@@ -843,7 +773,6 @@ export default function PivotPage() {
                                     {expandedRows[node.id] ? <MinusSquare style={{ width: '1.2em', height: '1.2em' }} /> : <PlusSquare style={{ width: '1.2em', height: '1.2em' }} />}
                                 </button>
                             ) : <span style={{ width: '1.2em' }} />}
-                            {/* Visual tweak: Jika label dimulai dengan No (No PSS), beri warna merah/italic supaya beda */}
                             <span className={`${node.isLeaf ? "text-slate-600" : "font-bold text-slate-800"} ${node.label.startsWith('No ') ? 'text-red-500 italic' : ''}`}>{node.label}</span>
                         </div>
                       </td>
@@ -875,7 +804,7 @@ export default function PivotPage() {
                    <tr><td colSpan={20} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2"><Filter size={24} /><span>Data tidak ditemukan untuk kombinasi filter ini.</span></td></tr>
                 )}
               </tbody>
-              <tfoot className="bg-slate-100 font-bold text-slate-800 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] text-[inherit]">
+              <tfoot className="bg-slate-100 font-bold text-slate-800-[inherit] sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                 <tr>
                     <td className="p-3 sticky left-0 z-30 bg-slate-100 border-t border-r border-slate-300 whitespace-nowrap align-top"><div className="mt-[0.2em]">GRAND TOTAL</div></td>
                     {pivotData.colKeys.map(colKey => {
