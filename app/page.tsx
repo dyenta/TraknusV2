@@ -58,7 +58,7 @@ const ControlBox = ({ label, value, onChange, options }: any) => {
     )
 }
 
-// Updated MultiSelect: Removed "Selesai" button
+// Updated MultiSelect: Hapus autoFocus agar keyboard tidak auto-popup di Mobile
 const MultiSelect = ({ label, options, optionsRaw, selected, onChange }: any) => {
   const [isOpen, setIsOpen] = useState(false), [searchTerm, setSearchTerm] = useState(""), containerRef = useRef<HTMLDivElement>(null)
   const finalOptions = useMemo(() => (optionsRaw || (options || []).map((o: any) => ({ label: !o || String(o).trim() === '' ? `No ${label}` : String(o), value: !o || String(o).trim() === '' ? "" : String(o) }))), [options, optionsRaw, label])
@@ -82,7 +82,8 @@ const MultiSelect = ({ label, options, optionsRaw, selected, onChange }: any) =>
             <div className="absolute inset-0 md:hidden" onClick={()=>setIsOpen(false)}></div>
             <div className="relative w-full max-w-xs md:w-64 max-h-[70vh] md:max-h-80 flex flex-col bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-200">
                 <div className="shrink-0 p-2 border-b border-slate-100 dark:border-slate-800 flex gap-2">
-                    <div className="relative flex-1"><Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" /><input type="text" placeholder="Cari..." className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} autoFocus />{searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={12}/></button>}</div>
+                    {/* PERUBAHAN DI SINI: autoFocus dihapus */}
+                    <div className="relative flex-1"><Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" /><input type="text" placeholder="Cari..." className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />{searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={12}/></button>}</div>
                 </div>
                 <div className="overflow-y-auto flex-1 p-1">
                     {!searchTerm && <div onClick={()=>toggle('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs font-bold border-b border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200"><div className={`w-3 h-3 rounded border flex items-center justify-center ${selected.includes('All')?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{selected.includes('All')&&<Check size={8} className="text-white"/>}</div>Select All</div>}
@@ -179,9 +180,11 @@ export default function PivotPage() {
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
   const yAxisFormatter = (value: number) => { if (value >= 1000000000) return (value / 1000000000).toFixed(1).replace(/\.0$/, '') + 'M'; if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M'; return value.toString() }
 
-  return (
+return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-2 md:p-6 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300">
       <div className="max-w-400 mx-auto space-y-4">
+        
+        {/* 1. TOP CONTROLS (Z-50) - Paling atas agar Dropdown tidak tertutup elemen bawahnya */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4 z-50 relative transition-colors">
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
             <div><h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> Sales Analytics</h1><p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p></div>
@@ -193,15 +196,26 @@ export default function PivotPage() {
           </div>
         </div>
 
-        {(chartData.length > 0 || loading) && (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative z-45 flex flex-col transition-colors min-h-87.5">
-                {loading && (<div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl transition-all"><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Memuat Data...</span></div>)}
+        {/* 2. CHART (Z-30) - Posisi dikembalikan ke atas Hierarki */}
+        {/* Menggunakan kondisi (loading || isRefreshing) untuk memicu Blur Overlay */}
+        {(chartData.length > 0 || loading || isRefreshing) && (
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative z-20 flex flex-col transition-colors min-h-87.5">
+                {(loading || isRefreshing) && (
+                  <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl transition-all">
+                    {isRefreshing ? (
+                       <><RefreshCcw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span></>
+                    ) : (
+                       <><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Memuat Data...</span></>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-2 border-b border-slate-50 dark:border-slate-800 pb-2"><div className="flex items-center gap-2"><BarChart3 size={18} className="text-indigo-600 dark:text-indigo-400"/><span className="text-sm font-bold text-slate-700 dark:text-slate-200">SALES PERFORMANCE</span></div></div>
                 <div className="h-80 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} /><XAxis dataKey="name" tick={{fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} /><YAxis tickFormatter={yAxisFormatter} tick={{fontSize:10, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} width={40} /><Tooltip cursor={{fill: isDark ? '#1e293b' : '#f8fafc'}} content={<CustomTooltip />} />{MONTH_OPTIONS.map((m, i) => <Bar key={m.value} dataKey={m.value} name={m.label} stackId="a" fill={MONTH_COLORS[i]} barSize={40} />)}</BarChart></ResponsiveContainer></div>
             </div>
         )}
 
-        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative z-40 transition-colors">
+        {/* 3. HIERARKI CONTROLS (Z-20) - Posisi di bawah Chart */}
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative z-30 transition-colors">
            <div className="w-full flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700"><button onClick={()=>setZoom(p=>Math.max(0.4, Number((p-0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button><input type="range" min="0.4" max="1.5" step="0.1" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/><button onClick={()=>setZoom(p=>Math.min(1.5, Number((p+0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button><span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoom*100).toFixed(0)}%</span></div>
@@ -209,25 +223,23 @@ export default function PivotPage() {
            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">{[lvl1, lvl2, lvl3, lvl4].map((v,i) => <ControlBox key={i} label={`Level ${i+1}`} value={v} onChange={i===0?setLvl1:i===1?setLvl2:i===2?setLvl3:setLvl4} options={DIMENSION_OPTIONS} />)}</div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0 transition-colors">
+        {/* 4. TABLE (Z-10) - Paling Bawah */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-10 transition-colors">
           {(loading || isRefreshing) && (<div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm transition-all">{isRefreshing ? (<><RefreshCcw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span></>) : (<><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Memuat Data Pivot...</span></>)}</div>)}
           <div className="overflow-auto flex-1 relative w-full"><div style={{fontSize: `${14*zoom}px`}} className="min-w-full inline-block align-top transition-all duration-200"><table className="w-full border-collapse leading-normal text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 sticky top-0 z-20 shadow-sm"><tr>
               <th className="p-3 text-left font-bold border-b border-r border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
-                {pivotData.colKeys.map(k => { const i = getHeaderInfo(k), show = i.type==='year'||i.type==='subtotal', bgClass = i.type==='year' ? 'bg-slate-100 dark:bg-slate-800' : i.type==='subtotal' ? 'bg-slate-200 dark:bg-slate-700 border-l dark:border-l-slate-600' : 'bg-white dark:bg-slate-900 font-normal text-slate-500 dark:text-slate-500'; return <th key={k} className={`p-2 text-center font-bold border-b border-slate-300 dark:border-slate-600 min-w-[6em] ${bgClass}`}><div className="flex items-center justify-center gap-1">{show && <button onClick={()=>setExpandedCols(p=>({...p,[i.parent]:!p[i.parent]}))} className="hover:text-blue-600 dark:hover:text-blue-400">{expandedCols[i.parent]?<MinusSquare size="1.2em" className="text-red-500 dark:text-red-400"/>:<PlusSquare size="1.2em" className="text-blue-600 dark:text-blue-400"/>}</button>}{i.label}</div></th> })}
-              </tr>
-            </thead>
+              {pivotData.colKeys.map(k => { const i = getHeaderInfo(k), show = i.type==='year'||i.type==='subtotal', bgClass = i.type==='year' ? 'bg-slate-100 dark:bg-slate-800' : i.type==='subtotal' ? 'bg-slate-200 dark:bg-slate-700 border-l dark:border-l-slate-600' : 'bg-white dark:bg-slate-900 font-normal text-slate-500 dark:text-slate-500'; return <th key={k} className={`p-2 text-center font-bold border-b border-slate-300 dark:border-slate-600 min-w-[6em] ${bgClass}`}><div className="flex items-center justify-center gap-1">{show && <button onClick={()=>setExpandedCols(p=>({...p,[i.parent]:!p[i.parent]}))} className="hover:text-blue-600 dark:hover:text-blue-400">{expandedCols[i.parent]?<MinusSquare size="1.2em" className="text-red-500 dark:text-red-400"/>:<PlusSquare size="1.2em" className="text-blue-600 dark:text-blue-400"/>}</button>}{i.label}</div></th> })}
+            </tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visibleRows.length > 0 ? visibleRows.map(n => (<tr key={n.id} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group">
               <td className="p-2 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 sticky left-0 z-10 whitespace-nowrap"><div className="flex items-center gap-[0.5em]" style={{paddingLeft:`${n.level*1.5}em`}}>{!n.isLeaf ? <button onClick={()=>setExpandedRows(p=>({...p,[n.id]:!p[n.id]}))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">{expandedRows[n.id]?<MinusSquare size="1.2em"/>:<PlusSquare size="1.2em"/>}</button> : <span style={{width:'1.2em'}}/>}<span className={`${n.isLeaf?"text-slate-600 dark:text-slate-400":"font-bold text-slate-800 dark:text-slate-200"} ${n.label.startsWith('No ') ? 'text-red-500 dark:text-red-400 italic' : ''}`}>{n.label}</span></div></td>
-                {pivotData.colKeys.map(k => { const val = n.values[k] || 0, i = getHeaderInfo(k), isSub = i.type==='subtotal'; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = n.values[prevK] || 0; if (isSub && prev===0) prev = n.values[(parseInt(i.parent)-1)+''] || 0; const cellBg = isSub ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' : ''; return <td key={k} className={`p-2 text-right border-r border-slate-100 dark:border-slate-800 align-top ${cellBg}`}><div className="flex flex-col items-end gap-0.5"><span className={val?'text-slate-900 dark:text-slate-200':'text-slate-300 dark:text-slate-700 font-mono'}>{fmt(val)}</span>{prev>0&&<YoYBadge current={val} previous={prev}/>}</div></td> })}
-              </tr>)) : <tr><td colSpan={20} className="p-12 text-center text-slate-400 dark:text-slate-500"><Filter size={24} className="mx-auto mb-2"/>Data tidak ditemukan.</td></tr>}
-            </tbody>
+              {pivotData.colKeys.map(k => { const val = n.values[k] || 0, i = getHeaderInfo(k), isSub = i.type==='subtotal'; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = n.values[prevK] || 0; if (isSub && prev===0) prev = n.values[(parseInt(i.parent)-1)+''] || 0; const cellBg = isSub ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' : ''; return <td key={k} className={`p-2 text-right border-r border-slate-100 dark:border-slate-800 align-top ${cellBg}`}><div className="flex flex-col items-end gap-0.5"><span className={val?'text-slate-900 dark:text-slate-200':'text-slate-300 dark:text-slate-700 font-mono'}>{fmt(val)}</span>{prev>0&&<YoYBadge current={val} previous={prev}/>}</div></td> })}
+            </tr>)) : <tr><td colSpan={20} className="p-12 text-center text-slate-400 dark:text-slate-500"><Filter size={24} className="mx-auto mb-2"/>Data tidak ditemukan.</td></tr>}</tbody>
             <tfoot className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-800 dark:text-slate-200 sticky bottom-0 z-30 shadow-sm"><tr>
               <td className="p-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 border-t border-r border-slate-300 dark:border-slate-600">GRAND TOTAL</td>
-                {pivotData.colKeys.map(k => { const i=getHeaderInfo(k), tot=pivotData.colTotals[k]||0; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = pivotData.colTotals[prevK] || 0; if (i.type==='subtotal' && prev===0) prev = pivotData.colTotals[(parseInt(i.parent)-1)+''] || 0; return <td key={k} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${i.type==='subtotal'?'bg-slate-200 dark:bg-slate-700':''}`}><div className="flex flex-col items-end justify-between h-full gap-0.5 min-h-[2.5em]"><span className="font-mono">{fmt(tot)}</span>{prev>0 ? <YoYBadge current={tot} previous={prev}/> : <div className="h-[1em]"></div>}</div></td> })}
-              </tr></tfoot>
-          </table></div>
-          </div>
+              {pivotData.colKeys.map(k => { const i=getHeaderInfo(k), tot=pivotData.colTotals[k]||0; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = pivotData.colTotals[prevK] || 0; if (i.type==='subtotal' && prev===0) prev = pivotData.colTotals[(parseInt(i.parent)-1)+''] || 0; return <td key={k} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${i.type==='subtotal'?'bg-slate-200 dark:bg-slate-700':''}`}><div className="flex flex-col items-end justify-between h-full gap-0.5 min-h-[2.5em]"><span className="font-mono">{fmt(tot)}</span>{prev>0 ? <YoYBadge current={tot} previous={prev}/> : <div className="h-[1em]"></div>}</div></td> })}
+            </tr></tfoot>
+          </table></div></div>
         </div>
       </div>
     </main>
