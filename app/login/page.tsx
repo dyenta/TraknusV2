@@ -120,7 +120,7 @@ export default function LoginPage() {
       
       {/* Footer text kecil */}
       <div className="absolute bottom-6 text-slate-400 text-xs text-center">
-        &copy; {new Date().getFullYear()} Sales Analytics Dashboard. Secure Login.
+        &copy; {new Date().getFullYear()} Sales Analytics Dashboard.
       </div>
     </div>
   )
