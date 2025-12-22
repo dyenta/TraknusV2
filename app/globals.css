@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* OVERRIDE DARK MODE DEFAULT:
+   Baris di bawah ini memaksa Tailwind v4 untuk menyalakan mode gelap 
+   HANYA jika ada class 'dark' di tag <html> (bukan dari settingan laptop).
+*/
+@variant dark (&:where(.dark, .dark *));
+
+/* Styling Dasar Body agar transisi warna halus */
+body {
+  @apply bg-slate-50 text-slate-900 transition-colors duration-300;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Styling saat mode gelap aktif */
+:root.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+@layer utilities {
+  /* Tampilan Autofill Default (Light Mode) - Background Putih, Teks Hitam */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover, 
+  input:-webkit-autofill:focus, 
+  input:-webkit-autofill:active{
+      -webkit-box-shadow: 0 0 0 30px white inset !important;
+      -webkit-text-fill-color: #1e293b !important; /* slate-800 */
+      transition: background-color 5000s ease-in-out 0s;
+  }
+
+  /* Tampilan Autofill DARK MODE - Background Slate-950, Teks Putih */
+  .dark input:-webkit-autofill,
+  .dark input:-webkit-autofill:hover, 
+  .dark input:-webkit-autofill:focus, 
+  .dark input:-webkit-autofill:active{
+      /* Menggunakan hex code dari bg-slate-950 (#020617) */
+      -webkit-box-shadow: 0 0 0 30px #020617 inset !important;
+      /* Menggunakan hex code dari text-slate-100 (#f1f5f9) */
+      -webkit-text-fill-color: #f1f5f9 !important;
+      caret-color: #f1f5f9;
+  }
 }
