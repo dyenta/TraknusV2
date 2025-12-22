@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sales Dashboard",
+  title: "TrakNus PAC Sales Dashboard",
   description: "Dashboard Analytics",
 };
 
