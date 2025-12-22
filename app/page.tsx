@@ -23,34 +23,74 @@ const YoYBadge = ({ current, previous }: { current: number, previous: number }) 
     return <div className={`flex items-center gap-[0.2em] text-[0.7em] font-bold px-[0.5em] rounded-full border shadow-sm ${percent===0 ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' : isUp ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800'}`}>{isUp ? <ArrowUp style={{width:'0.8em',height:'0.8em'}}/> : (percent!==0 && <ArrowDown style={{width:'0.8em',height:'0.8em'}}/>)}<span>{Math.abs(percent).toFixed(1)}%</span></div>
 }
 
-const ControlBox = ({ label, value, onChange, options, color }: any) => (
-    <div className={`bg-white dark:bg-slate-900 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-1.5 w-full hover:border-${color}-400 dark:hover:border-${color}-500 transition-colors`}>
-        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 bg-${color}-50 text-${color}-700 dark:bg-slate-950 dark:text-${color}-300 dark:border dark:border-${color}-900/50`}>{label}</span>
-        <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 w-full focus:outline-none cursor-pointer py-1 min-w-12.5 truncate [&>option]:bg-white dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-200">
-            {options.map((opt:any)=><option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
-    </div>
-)
+// Updated ControlBox: Custom Dropdown Style (Single Select)
+const ControlBox = ({ label, value, onChange, options }: any) => {
+    const [isOpen, setIsOpen] = useState(false), containerRef = useRef<HTMLDivElement>(null)
+    // Close on outside click
+    useEffect(() => {
+        const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
+        if (isOpen) document.addEventListener('mousedown', handleDown); return () => document.removeEventListener('mousedown', handleDown)
+    }, [isOpen])
 
+    const selectedLabel = options.find((o:any) => o.value === value)?.label || "Select..."
+
+    return (
+        <div className="flex flex-col w-full relative" ref={containerRef}>
+            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label>
+            <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors text-left ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                <span className="truncate font-medium text-slate-700 dark:text-slate-200">{selectedLabel}</span>
+                <ChevronDown size={14} className="text-slate-400 shrink-0" />
+            </button>
+            {isOpen && (
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 md:bg-transparent md:p-0 md:absolute md:inset-auto md:top-full md:left-0 md:block md:mt-1">
+                    <div className="absolute inset-0 md:hidden" onClick={()=>setIsOpen(false)}></div>
+                    <div className="relative w-full max-w-xs md:w-full min-w-37.5 max-h-[50vh] overflow-y-auto bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-xl z-10 animate-in fade-in zoom-in-95 duration-200 py-1 flex flex-col">
+                         {options.map((opt:any) => (
+                             <button key={opt.value} onClick={() => { onChange(opt.value); setIsOpen(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors ${value === opt.value ? 'text-blue-600 dark:text-blue-400 font-bold bg-slate-50 dark:bg-slate-800/50' : 'text-slate-700 dark:text-slate-200'}`}>
+                                 <span>{opt.label}</span>
+                                 {value === opt.value && <Check size={12}/>}
+                             </button>
+                         ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Updated MultiSelect: Removed "Selesai" button
 const MultiSelect = ({ label, options, optionsRaw, selected, onChange }: any) => {
-  const [isOpen, setIsOpen] = useState(false), [q, setQ] = useState(""), ref = useRef<HTMLDivElement>(null)
-  const list = useMemo(() => (optionsRaw || (options||[]).map((o:any)=>({label:!o||String(o).trim()===''?'(Blanks)':String(o),value:!o||String(o).trim()===''?"":String(o)}))), [options,optionsRaw])
-  const filtered = list.filter((o:any)=>o.label.toLowerCase().includes(q.toLowerCase()))
-  useEffect(()=>{const h=(e:any)=>{if(ref.current&&!ref.current.contains(e.target))setIsOpen(false)};document.addEventListener("mousedown",h);return ()=>document.removeEventListener("mousedown",h)},[])
-  const toggle=(v:string)=>{if(v==='All')onChange(selected.includes('All')?[]:['All']);else{let n=selected.includes('All')?list.map((o:any)=>o.value):[...selected];n=n.includes(v)?n.filter((i:string)=>i!==v):[...n,v];onChange((n.length===list.length&&list.length>0)?['All']:n)}}
-  const disp=()=>{if(selected.includes('All'))return 'All';if(!selected.length)return 'None';const n=selected.map((v:string)=>list.find((o:any)=>o.value===v)?.label).filter(Boolean);return n.length>2?`${n[0]}, ${n[1]} +${n.length-2}`:n.join(', ')}
+  const [isOpen, setIsOpen] = useState(false), [searchTerm, setSearchTerm] = useState(""), containerRef = useRef<HTMLDivElement>(null)
+  const finalOptions = useMemo(() => (optionsRaw || (options || []).map((o: any) => ({ label: !o || String(o).trim() === '' ? `No ${label}` : String(o), value: !o || String(o).trim() === '' ? "" : String(o) }))), [options, optionsRaw, label])
+  const filtered = finalOptions.filter((o:any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()))
+  
+  useEffect(() => { 
+      const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
+      const handleEsc = (e: KeyboardEvent) => { if(e.key==='Escape') setIsOpen(false) }
+      if (isOpen) { document.addEventListener('mousedown', handleDown); window.addEventListener('keydown', handleEsc) }
+      return () => { document.removeEventListener('mousedown', handleDown); window.removeEventListener('keydown', handleEsc) }
+  }, [isOpen])
+  
+  const toggle = (val: string) => { if (val === 'All') onChange(selected.includes('All') ? [] : ['All']); else { let newSel = selected.includes('All') ? finalOptions.map((o:any)=>o.value) : [...selected]; newSel = newSel.includes(val) ? newSel.filter((i:string)=>i!==val) : [...newSel, val]; onChange((newSel.length === finalOptions.length && finalOptions.length > 0) ? ['All'] : newSel) } }
+  const display = () => { if (selected.includes('All')) return 'All'; if (!selected.length) return 'None'; const names = selected.map((v:string) => finalOptions.find((o:any)=>o.value===v)?.label).filter(Boolean); return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length-2}` : names.join(', ') }
   
   return (
-    <div className="relative" ref={ref}>
-       <div className="flex flex-col"><label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label>
-       <button onClick={()=>setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors ${isOpen?'border-blue-500 ring-1 ring-blue-500':'border-slate-200 dark:border-slate-700'}`}><span className="truncate max-w-24 text-left font-medium text-slate-700 dark:text-slate-200">{disp()}</span><ChevronDown size={14} className="text-slate-400 shrink-0"/></button></div>
-       {isOpen && (<>
-          <div className="fixed inset-0 bg-black/60 z-60 md:hidden backdrop-blur-sm" onClick={()=>setIsOpen(false)}/>
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-sm max-h-[70vh] z-70 flex flex-col bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-xl md:absolute md:top-full md:left-0 md:translate-x-0 md:translate-y-0 md:w-64 md:max-h-80 md:mt-1 md:z-50">
-            <div className="p-2 border-b border-slate-100 dark:border-slate-800 relative"><Search size={14} className="absolute left-4 top-4.5 text-slate-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={`Cari ${label}...`} className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500" autoFocus/></div>
-            <div className="overflow-y-auto flex-1 p-1">{!q&&<div onClick={()=>toggle('All')} className="flex gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs font-bold border-b border-slate-50 dark:border-slate-800 text-slate-700 dark:text-slate-200"><div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${selected.includes('All')?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{selected.includes('All')&&<Check size={10} className="text-white"/>}</div>Select All</div>}{filtered.length?filtered.map((o:any)=>{const s=selected.includes(o.value)||selected.includes('All');return(<div key={o.value} onClick={()=>toggle(o.value)} className="flex gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs items-center"><div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${s?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{s&&<Check size={10} className="text-white"/>}</div><span className={`truncate ${s?'font-semibold text-slate-800 dark:text-slate-100':'text-slate-600 dark:text-slate-400'}`}>{o.label}</span></div>)}):<div className="p-4 text-center text-xs text-slate-400">Nihil.</div>}</div>
-            <div className="p-2 border-t border-slate-100 dark:border-slate-800 md:hidden"><button onClick={()=>setIsOpen(false)} className="w-full py-2 bg-blue-600 text-white rounded text-sm font-bold">Selesai</button></div>
-          </div></>)}
+    <div className="relative" ref={containerRef}>
+       <div className="flex flex-col"><label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label><button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}><span className="truncate font-medium text-slate-700 dark:text-slate-200 max-w-25 text-left">{display()}</span><ChevronDown size={14} className="text-slate-400 shrink-0" /></button></div>
+       {isOpen && (
+         <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 md:bg-transparent md:p-0 md:absolute md:inset-auto md:top-full md:left-0 md:block md:mt-1">
+            <div className="absolute inset-0 md:hidden" onClick={()=>setIsOpen(false)}></div>
+            <div className="relative w-full max-w-xs md:w-64 max-h-[70vh] md:max-h-80 flex flex-col bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-200">
+                <div className="shrink-0 p-2 border-b border-slate-100 dark:border-slate-800 flex gap-2">
+                    <div className="relative flex-1"><Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" /><input type="text" placeholder="Cari..." className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} autoFocus />{searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={12}/></button>}</div>
+                </div>
+                <div className="overflow-y-auto flex-1 p-1">
+                    {!searchTerm && <div onClick={()=>toggle('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs font-bold border-b border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200"><div className={`w-3 h-3 rounded border flex items-center justify-center ${selected.includes('All')?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{selected.includes('All')&&<Check size={8} className="text-white"/>}</div>Select All</div>}
+                    {filtered.length ? filtered.map((o:any) => { const isSel = selected.includes(o.value) || selected.includes('All'); return (<div key={o.value||'empty'} onClick={()=>toggle(o.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs transition-colors"><div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSel?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{isSel&&<Check size={8} className="text-white"/>}</div><span className={`${isSel?'font-semibold text-slate-800 dark:text-slate-100':'text-slate-600 dark:text-slate-400'} ${o.value===""?'italic text-red-500 dark:text-red-400':''}`}>{o.label}</span></div>) }) : <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Nihil</div>}
+                </div>
+            </div>
+         </div>
+       )}
     </div>
   )
 }
@@ -70,14 +110,20 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 const ThemeToggle = () => {
-    const { theme, setTheme } = useTheme(); const [isOpen, setIsOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => { const h = (e: any) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false) }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
-    const icon = theme==='light'?<Sun size={14}/>:theme==='dark'?<Moon size={14}/>:<Laptop size={14}/>
+    const { theme, setTheme } = useTheme(); const [isOpen, setIsOpen] = useState(false);
+    const icons: any = { light: <Sun size={14}/>, dark: <Moon size={14}/>, system: <Laptop size={14}/> }
     return (
-        <div className="relative" ref={ref}>
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">{icon}</button>
-            {isOpen && <div className="absolute top-full right-0 mt-2 w-32 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden py-1">{['light', 'dark', 'system'].map((m: any) => <button key={m} onClick={() => { setTheme(m); setIsOpen(false) }} className={`flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === m ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}`}><span className="capitalize">{m}</span></button>)}</div>}
-        </div>
+      <div className="relative">
+        <button onClick={() => setIsOpen(!isOpen)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Ubah Tema">{icons[theme as string] || <Laptop size={14}/>}</button>
+        {isOpen && (
+            <div className="fixed inset-0 z-110 flex items-center justify-center bg-black/50 md:bg-transparent md:absolute md:inset-auto md:top-full md:right-0 md:mt-2 md:block">
+                 <div className="absolute inset-0 md:hidden" onClick={() => setIsOpen(false)}></div>
+                 <div className="relative bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden py-1 w-48 md:w-32 animate-in fade-in zoom-in-95 duration-150">
+                    {['light', 'dark', 'system'].map((m: any) => (<button key={m} onClick={() => { setTheme(m); setIsOpen(false); }} className={`flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === m ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>{icons[m]} <span className="capitalize">{m}</span></button>))}
+                 </div>
+            </div>
+        )}
+      </div>
     )
 }
 
@@ -142,8 +188,8 @@ export default function PivotPage() {
             <div className="flex items-center gap-2"><ThemeToggle /><div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div><button onClick={() => window.location.reload()} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button><button onClick={handleUpdate} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 dark:bg-emerald-700 text-white text-xs font-bold rounded hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex gap-2 border border-emerald-600 dark:border-emerald-800"><Database size={14}/> {isRefreshing?'Updating...':'Update DB'}</button><div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div><button onClick={handleLogout} className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-100 dark:border-red-900/50 flex gap-2"><LogOut size={14}/> Logout</button></div>
           </div>
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-             <div className="flex flex-wrap gap-2"><MultiSelect label="Tahun" options={opts.year} selected={selYears} onChange={setSelYears} /><MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selMonths} onChange={setSelMonths} /><MultiSelect label="Area" options={opts.areas} selected={selAreas} onChange={setSelAreas} /><MultiSelect label="Business Area" options={opts.ba} selected={selBA} onChange={setSelBA} /></div>
-             <div className="flex flex-wrap gap-2"><MultiSelect label="Key Account" options={opts.kat} selected={selKAT} onChange={setSelKAT} /><MultiSelect label="Product" options={opts.products} selected={selProd} onChange={setSelProd} /><MultiSelect label="PSS" options={opts.pss} selected={selPSS} onChange={setSelPSS} /><MultiSelect label="Cust Group" options={opts.cg} selected={selCG} onChange={setSelCG} /></div>
+             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2"><MultiSelect label="Tahun" options={opts.year} selected={selYears} onChange={setSelYears} /><MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selMonths} onChange={setSelMonths} /><MultiSelect label="Area" options={opts.areas} selected={selAreas} onChange={setSelAreas} /><MultiSelect label="Business Area" options={opts.ba} selected={selBA} onChange={setSelBA} /></div>
+             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2"><MultiSelect label="Key Account" options={opts.kat} selected={selKAT} onChange={setSelKAT} /><MultiSelect label="Product" options={opts.products} selected={selProd} onChange={setSelProd} /><MultiSelect label="PSS" options={opts.pss} selected={selPSS} onChange={setSelPSS} /><MultiSelect label="Cust Group" options={opts.cg} selected={selCG} onChange={setSelCG} /></div>
           </div>
         </div>
 
@@ -160,53 +206,28 @@ export default function PivotPage() {
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700"><button onClick={()=>setZoom(p=>Math.max(0.4, Number((p-0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button><input type="range" min="0.4" max="1.5" step="0.1" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/><button onClick={()=>setZoom(p=>Math.min(1.5, Number((p+0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button><span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoom*100).toFixed(0)}%</span></div>
            </div>
-           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full">{[lvl1, lvl2, lvl3, lvl4].map((v,i) => <ControlBox key={i} label={`Lvl ${i+1}`} value={v} onChange={i===0?setLvl1:i===1?setLvl2:i===2?setLvl3:setLvl4} options={DIMENSION_OPTIONS} color="indigo" />)}</div>
+           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">{[lvl1, lvl2, lvl3, lvl4].map((v,i) => <ControlBox key={i} label={`Level ${i+1}`} value={v} onChange={i===0?setLvl1:i===1?setLvl2:i===2?setLvl3:setLvl4} options={DIMENSION_OPTIONS} />)}</div>
         </div>
 
-        {/* Container Tabel Utama */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col h-[65vh] md:h-[70vh] relative z-0 transition-colors">
-          
-          {/* IMPLEMENTASI BLUR & LOADING (Menggabungkan loading data & refreshing DB) */}
-          {(loading || isRefreshing) && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm transition-all">
-               {isRefreshing ? (
-                 <>
-                   <RefreshCcw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/>
-                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span>
-                 </>
-               ) : (
-                 <>
-                   <Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/>
-                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Memuat Data Pivot...</span>
-                 </>
-               )}
-            </div>
-          )}
-
-          <div className="overflow-auto flex-1 relative w-full">
-            <div style={{fontSize: `${14*zoom}px`}} className="min-w-full inline-block align-top transition-all duration-200"> 
-            <table className="w-full border-collapse leading-normal text-slate-600 dark:text-slate-400">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 sticky top-0 z-20 shadow-sm">
-                <tr>
-                  <th className="p-3 text-left font-bold border-b border-r border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
-                  {pivotData.colKeys.map(k => { const i = getHeaderInfo(k), show = i.type==='year'||i.type==='subtotal', bgClass = i.type==='year' ? 'bg-slate-100 dark:bg-slate-800' : i.type==='subtotal' ? 'bg-slate-200 dark:bg-slate-700 border-l dark:border-l-slate-600' : 'bg-white dark:bg-slate-900 font-normal text-slate-500 dark:text-slate-500'; return <th key={k} className={`p-2 text-center font-bold border-b border-slate-300 dark:border-slate-600 min-w-[6em] ${bgClass}`}><div className="flex items-center justify-center gap-1">{show && <button onClick={()=>setExpandedCols(p=>({...p,[i.parent]:!p[i.parent]}))} className="hover:text-blue-600 dark:hover:text-blue-400">{expandedCols[i.parent]?<MinusSquare size="1.2em" className="text-red-500 dark:text-red-400"/>:<PlusSquare size="1.2em" className="text-blue-600 dark:text-blue-400"/>}</button>}{i.label}</div></th> })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {visibleRows.length > 0 ? visibleRows.map(n => (
-                    <tr key={n.id} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group">
-                      <td className="p-2 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 sticky left-0 z-10 whitespace-nowrap"><div className="flex items-center gap-[0.5em]" style={{paddingLeft:`${n.level*1.5}em`}}>{!n.isLeaf ? <button onClick={()=>setExpandedRows(p=>({...p,[n.id]:!p[n.id]}))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">{expandedRows[n.id]?<MinusSquare size="1.2em"/>:<PlusSquare size="1.2em"/>}</button> : <span style={{width:'1.2em'}}/>}<span className={`${n.isLeaf?"text-slate-600 dark:text-slate-400":"font-bold text-slate-800 dark:text-slate-200"} ${n.label.startsWith('No ') ? 'text-red-500 dark:text-red-400 italic' : ''}`}>{n.label}</span></div></td>
-                      {pivotData.colKeys.map(k => { const val = n.values[k] || 0, i = getHeaderInfo(k), isSub = i.type==='subtotal'; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = n.values[prevK] || 0; if (isSub && prev===0) prev = n.values[(parseInt(i.parent)-1)+''] || 0; const cellBg = isSub ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' : ''; return <td key={k} className={`p-2 text-right border-r border-slate-100 dark:border-slate-800 align-top ${cellBg}`}><div className="flex flex-col items-end gap-0.5"><span className={val?'text-slate-900 dark:text-slate-200':'text-slate-300 dark:text-slate-700 font-mono'}>{fmt(val)}</span>{prev>0&&<YoYBadge current={val} previous={prev}/>}</div></td> })}
-                    </tr>
-                )) : <tr><td colSpan={20} className="p-12 text-center text-slate-400 dark:text-slate-500"><Filter size={24} className="mx-auto mb-2"/>Data tidak ditemukan.</td></tr>}
-              </tbody>
-              <tfoot className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-800 dark:text-slate-200 sticky bottom-0 z-30 shadow-sm">
-                <tr>
-                    <td className="p-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 border-t border-r border-slate-300 dark:border-slate-600">GRAND TOTAL</td>
-                    {pivotData.colKeys.map(k => { const i=getHeaderInfo(k), tot=pivotData.colTotals[k]||0; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = pivotData.colTotals[prevK] || 0; if (i.type==='subtotal' && prev===0) prev = pivotData.colTotals[(parseInt(i.parent)-1)+''] || 0; return <td key={k} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${i.type==='subtotal'?'bg-slate-200 dark:bg-slate-700':''}`}><div className="flex flex-col items-end justify-between h-full gap-0.5 min-h-[2.5em]"><span className="font-mono">{fmt(tot)}</span>{prev>0 ? <YoYBadge current={tot} previous={prev}/> : <div className="h-[1em]"></div>}</div></td> })}
-                </tr>
-              </tfoot>
-            </table></div></div>
+          {(loading || isRefreshing) && (<div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm transition-all">{isRefreshing ? (<><RefreshCcw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span></>) : (<><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Memuat Data Pivot...</span></>)}</div>)}
+          <div className="overflow-auto flex-1 relative w-full"><div style={{fontSize: `${14*zoom}px`}} className="min-w-full inline-block align-top transition-all duration-200"><table className="w-full border-collapse leading-normal text-slate-600 dark:text-slate-400">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 sticky top-0 z-20 shadow-sm"><tr>
+              <th className="p-3 text-left font-bold border-b border-r border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 sticky left-0 z-30 min-w-[8em]">HIERARKI</th>
+                {pivotData.colKeys.map(k => { const i = getHeaderInfo(k), show = i.type==='year'||i.type==='subtotal', bgClass = i.type==='year' ? 'bg-slate-100 dark:bg-slate-800' : i.type==='subtotal' ? 'bg-slate-200 dark:bg-slate-700 border-l dark:border-l-slate-600' : 'bg-white dark:bg-slate-900 font-normal text-slate-500 dark:text-slate-500'; return <th key={k} className={`p-2 text-center font-bold border-b border-slate-300 dark:border-slate-600 min-w-[6em] ${bgClass}`}><div className="flex items-center justify-center gap-1">{show && <button onClick={()=>setExpandedCols(p=>({...p,[i.parent]:!p[i.parent]}))} className="hover:text-blue-600 dark:hover:text-blue-400">{expandedCols[i.parent]?<MinusSquare size="1.2em" className="text-red-500 dark:text-red-400"/>:<PlusSquare size="1.2em" className="text-blue-600 dark:text-blue-400"/>}</button>}{i.label}</div></th> })}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visibleRows.length > 0 ? visibleRows.map(n => (<tr key={n.id} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group">
+              <td className="p-2 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 sticky left-0 z-10 whitespace-nowrap"><div className="flex items-center gap-[0.5em]" style={{paddingLeft:`${n.level*1.5}em`}}>{!n.isLeaf ? <button onClick={()=>setExpandedRows(p=>({...p,[n.id]:!p[n.id]}))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">{expandedRows[n.id]?<MinusSquare size="1.2em"/>:<PlusSquare size="1.2em"/>}</button> : <span style={{width:'1.2em'}}/>}<span className={`${n.isLeaf?"text-slate-600 dark:text-slate-400":"font-bold text-slate-800 dark:text-slate-200"} ${n.label.startsWith('No ') ? 'text-red-500 dark:text-red-400 italic' : ''}`}>{n.label}</span></div></td>
+                {pivotData.colKeys.map(k => { const val = n.values[k] || 0, i = getHeaderInfo(k), isSub = i.type==='subtotal'; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = n.values[prevK] || 0; if (isSub && prev===0) prev = n.values[(parseInt(i.parent)-1)+''] || 0; const cellBg = isSub ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' : ''; return <td key={k} className={`p-2 text-right border-r border-slate-100 dark:border-slate-800 align-top ${cellBg}`}><div className="flex flex-col items-end gap-0.5"><span className={val?'text-slate-900 dark:text-slate-200':'text-slate-300 dark:text-slate-700 font-mono'}>{fmt(val)}</span>{prev>0&&<YoYBadge current={val} previous={prev}/>}</div></td> })}
+              </tr>)) : <tr><td colSpan={20} className="p-12 text-center text-slate-400 dark:text-slate-500"><Filter size={24} className="mx-auto mb-2"/>Data tidak ditemukan.</td></tr>}
+            </tbody>
+            <tfoot className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-800 dark:text-slate-200 sticky bottom-0 z-30 shadow-sm"><tr>
+              <td className="p-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 border-t border-r border-slate-300 dark:border-slate-600">GRAND TOTAL</td>
+                {pivotData.colKeys.map(k => { const i=getHeaderInfo(k), tot=pivotData.colTotals[k]||0; let prevK = i.type==='year'?(parseInt(i.parent)-1)+'' : i.type==='month'?`${parseInt(i.parent)-1}-${k.split('-')[1]}` : `${parseInt(i.parent)-1}-Total`; let prev = pivotData.colTotals[prevK] || 0; if (i.type==='subtotal' && prev===0) prev = pivotData.colTotals[(parseInt(i.parent)-1)+''] || 0; return <td key={k} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${i.type==='subtotal'?'bg-slate-200 dark:bg-slate-700':''}`}><div className="flex flex-col items-end justify-between h-full gap-0.5 min-h-[2.5em]"><span className="font-mono">{fmt(tot)}</span>{prev>0 ? <YoYBadge current={tot} previous={prev}/> : <div className="h-[1em]"></div>}</div></td> })}
+              </tr></tfoot>
+          </table></div>
+          </div>
         </div>
       </div>
     </main>
