@@ -229,7 +229,7 @@ return (
         )}
 
         {/* 3. HIERARKI CONTROLS */}
-        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative z-50 transition-colors">
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative z-40 transition-colors">
            <div className="w-full flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700"><button onClick={()=>setZoom(p=>Math.max(0.4, Number((p-0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button><input type="range" min="0.4" max="1.5" step="0.1" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/><button onClick={()=>setZoom(p=>Math.min(1.5, Number((p+0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button><span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoom*100).toFixed(0)}%</span></div>
