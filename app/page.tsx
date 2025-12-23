@@ -154,6 +154,9 @@ export default function PivotPage() {
   const [selAreas, setSelAreas] = useState(['POWER AGCON']), [selBA, setSelBA] = useState(['All']), [selPSS, setSelPSS] = useState(['All']), [selKAT, setSelKAT] = useState(['All']), [selCG, setSelCG] = useState(['All']), [selProd, setSelProd] = useState(['All'])
   const [opts, setOpts] = useState({ year:[], months:[], areas:[], ba:[], pss:[], kat:[], products:[], cg:[] })
 
+  // --- NEW STATE: TRACK ACTIVE FILTER LAYER ---
+  const [activeLayer, setActiveLayer] = useState<'top' | 'hier'>('top')
+
   useEffect(() => setMounted(true), []); const isDark = mounted && (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))
   const activeLevels = useMemo(() => [lvl1, lvl2, lvl3, lvl4].filter(l => l !== ''), [lvl1, lvl2, lvl3, lvl4])
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows, activeLevels })
@@ -192,13 +195,15 @@ return (
       <div className="max-w-400 mx-auto space-y-4">
         
         {/* 1. TOP CONTROLS */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4 z-50 relative transition-colors">
+        <div 
+          onClickCapture={() => setActiveLayer('top')}
+          className={`bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4 relative transition-colors ${activeLayer === 'top' ? 'z-50' : 'z-40'}`}
+        >
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
             <div><h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> Sales Analytics</h1><p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p></div>
             <div className="flex items-center gap-2">
                 <ThemeToggle />
                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                {/* FIX: Ganti window.location.reload() dengan fetchData */}
                 <button onClick={fetchData} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button>
                 <button onClick={handleUpdate} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 dark:bg-emerald-700 text-white text-xs font-bold rounded hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex gap-2 border border-emerald-600 dark:border-emerald-800"><Database size={14}/> {isRefreshing?'Updating...':'Update DB'}</button>
                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
@@ -211,9 +216,9 @@ return (
           </div>
         </div>
 
-        {/* 2. CHART */}
+        {/* 2. CHART - Z-INDEX DIUBAH MENJADI 30 */}
         {(chartData.length > 0 || loading || isRefreshing) && (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative z-20 flex flex-col transition-colors min-h-87.5">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative z-30 flex flex-col transition-colors min-h-87.5">
                 {(loading || isRefreshing) && (
                   <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl transition-all">
                     {isRefreshing ? (
@@ -229,7 +234,10 @@ return (
         )}
 
         {/* 3. HIERARKI CONTROLS */}
-        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative z-40 transition-colors">
+        <div 
+           onClickCapture={() => setActiveLayer('hier')}
+           className={`bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative transition-colors ${activeLayer === 'hier' ? 'z-50' : 'z-40'}`}
+        >
            <div className="w-full flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
               <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700"><button onClick={()=>setZoom(p=>Math.max(0.4, Number((p-0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button><input type="range" min="0.4" max="1.5" step="0.1" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/><button onClick={()=>setZoom(p=>Math.min(1.5, Number((p+0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button><span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoom*100).toFixed(0)}%</span></div>
