@@ -3,11 +3,15 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+// 1. Tambahkan import Eye dan EyeOff
+import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  // 2. Tambahkan state untuk visibilitas password
+  const [showPassword, setShowPassword] = useState(false)
+  
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -71,7 +75,6 @@ export default function SignUpPage() {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
                   <Mail size={18} />
                 </div>
-                {/* UPDATE CLASS DI SINI */}
                 <input
                   type="email"
                   required
@@ -89,15 +92,28 @@ export default function SignUpPage() {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
                   <Lock size={18} />
                 </div>
-                {/* UPDATE CLASS DI SINI */}
+                
+                {/* 3. Input Password dimodifikasi */}
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"} // Ubah tipe input
                   required
                   placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                  // Ubah pr-4 menjadi pr-10 agar teks tidak tertutup ikon mata
+                  className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
                 />
+
+                {/* 4. Tombol Toggle Show/Hide */}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer transition-colors focus:outline-none"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+
               </div>
             </div>
 
