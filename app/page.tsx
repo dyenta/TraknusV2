@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2 } from 'lucide-react'
+import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2, MoreVertical, FileText, LayoutList, ChevronRight } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTheme } from './components/ThemeProvider'
 
+// --- INTERFACES & CONSTANTS ---
 export interface AggregatedRecord { year: number; month: number; col_label_1: string; col_label_2: string; col_label_3: string; col_label_4: string; total_amount: number; }
 export interface PivotNode { id: string; label: string; level: number; isLeaf: boolean; values: Record<string, number>; rowTotal: number; children?: PivotNode[]; }
 
@@ -14,6 +15,7 @@ export const DIMENSION_OPTIONS = [ { label: '(None)', value: '' }, { label: 'Bus
 export const MONTH_OPTIONS = [ { label: 'Jan', value: '1' }, { label: 'Feb', value: '2' }, { label: 'Mar', value: '3' }, { label: 'Apr', value: '4' }, { label: 'Mei', value: '5' }, { label: 'Jun', value: '6' }, { label: 'Jul', value: '7' }, { label: 'Agu', value: '8' }, { label: 'Sep', value: '9' }, { label: 'Okt', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Des', value: '12' } ]
 const MONTH_COLORS = ["#4338ca", "#4f46e5", "#5156cf", "#5a5ee0", "#6366f1", "#6d78e9", "#7782f0", "#818cf8", "#8795f3", "#919ff6", "#9baaf9", "#a5b4fc"]
 
+// --- HELPER COMPONENTS ---
 const YoYBadge = ({ current, previous }: { current: number, previous: number }) => {
     if (previous === 0) return null;
     const diff = current - previous, percent = (diff / previous) * 100, isUp = percent > 0
@@ -23,14 +25,11 @@ const YoYBadge = ({ current, previous }: { current: number, previous: number }) 
 
 const ControlBox = ({ label, value, onChange, options }: any) => {
     const [isOpen, setIsOpen] = useState(false), containerRef = useRef<HTMLDivElement>(null)
-    // Close on outside click
     useEffect(() => {
         const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
         if (isOpen) document.addEventListener('mousedown', handleDown); return () => document.removeEventListener('mousedown', handleDown)
     }, [isOpen])
-
     const selectedLabel = options.find((o:any) => o.value === value)?.label || "Select..."
-
     return (
         <div className="flex flex-col w-full relative" ref={containerRef}>
             <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label>
@@ -62,9 +61,7 @@ const MultiSelect = ({ label, options, optionsRaw, selected, onChange }: any) =>
   
   useEffect(() => { 
       const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
-      const handleEsc = (e: KeyboardEvent) => { if(e.key==='Escape') setIsOpen(false) }
-      if (isOpen) { document.addEventListener('mousedown', handleDown); window.addEventListener('keydown', handleEsc) }
-      return () => { document.removeEventListener('mousedown', handleDown); window.removeEventListener('keydown', handleEsc) }
+      if (isOpen) document.addEventListener('mousedown', handleDown); return () => document.removeEventListener('mousedown', handleDown)
   }, [isOpen])
   
   const toggle = (val: string) => { if (val === 'All') onChange(selected.includes('All') ? [] : ['All']); else { let newSel = selected.includes('All') ? finalOptions.map((o:any)=>o.value) : [...selected]; newSel = newSel.includes(val) ? newSel.filter((i:string)=>i!==val) : [...newSel, val]; onChange((newSel.length === finalOptions.length && finalOptions.length > 0) ? ['All'] : newSel) } }
@@ -105,24 +102,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 }
 
-const ThemeToggle = () => {
-    const { theme, setTheme } = useTheme(); const [isOpen, setIsOpen] = useState(false);
-    const icons: any = { light: <Sun size={14}/>, dark: <Moon size={14}/>, system: <Laptop size={14}/> }
-    return (
-      <div className="relative">
-        <button onClick={() => setIsOpen(!isOpen)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Ubah Tema">{icons[theme as string] || <Laptop size={14}/>}</button>
-        {isOpen && (
-            <div className="fixed inset-0 z-110 flex items-center justify-center bg-black/50 md:bg-transparent md:absolute md:inset-auto md:top-full md:right-0 md:mt-2 md:block">
-                 <div className="absolute inset-0 md:hidden" onClick={() => setIsOpen(false)}></div>
-                 <div className="relative bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden py-1 w-48 md:w-32 animate-in fade-in zoom-in-95 duration-150">
-                    {['light', 'dark', 'system'].map((m: any) => (<button key={m} onClick={() => { setTheme(m); setIsOpen(false); }} className={`flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === m ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>{icons[m]} <span className="capitalize">{m}</span></button>))}
-                 </div>
-            </div>
-        )}
-      </div>
-    )
-}
-
 function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: any) {
   return useMemo(() => {
     const uniqueYears = Array.from(new Set(data.map((d:any) => String(d.year)))).sort() as string[]
@@ -145,25 +124,62 @@ function usePivotLogic({ data, expandedCols, expandedRows, activeLevels }: any) 
 export default function PivotPage() {
   const router = useRouter()
   const supabase = useMemo(() => createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!), [])
+  const { theme, setTheme } = useTheme()
   
+  // STATE AUTH & DATA
+  const [authChecking, setAuthChecking] = useState(true) // Start dengan checking true
   const [data, setData] = useState<AggregatedRecord[]>([]), [chartData, setChartData] = useState<any[]>([]), [loading, setLoading] = useState(true), [isRefreshing, setIsRefreshing] = useState(false)
-  const { theme } = useTheme(), [mounted, setMounted] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [lvl1, setLvl1] = useState('business_area'), [lvl2, setLvl2] = useState(''), [lvl3, setLvl3] = useState(''), [lvl4, setLvl4] = useState('')
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}), [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
   const [zoom, setZoom] = useState(1), [selYears, setSelYears] = useState(['All']), [selMonths, setSelMonths] = useState(['All'])
   const [selAreas, setSelAreas] = useState(['POWER AGCON']), [selBA, setSelBA] = useState(['All']), [selPSS, setSelPSS] = useState(['All']), [selKAT, setSelKAT] = useState(['All']), [selCG, setSelCG] = useState(['All']), [selProd, setSelProd] = useState(['All'])
   const [opts, setOpts] = useState({ year:[], months:[], areas:[], ba:[], pss:[], kat:[], products:[], cg:[] })
-
-  // --- NEW STATE: TRACK ACTIVE FILTER LAYER ---
+  
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [activeLayer, setActiveLayer] = useState<'top' | 'hier'>('top')
 
-  useEffect(() => setMounted(true), []); const isDark = mounted && (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))
+  // --- AUTH CHECK FUNCTION ---
+  useEffect(() => {
+    const checkUser = async () => {
+      setAuthChecking(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+         router.replace('/login')
+         return
+      }
+
+      const email = user.email || ''
+      const isAllowed = email.endsWith('@traknus.co.id') || email === 'dyentadwian@gmail.com'
+
+      if (!isAllowed) {
+         // JIKA TIDAK BOLEH, LANGSUNG PINDAH KE HALAMAN KELUHAN
+         router.replace('/sales-issues')
+      } else {
+         // JIKA BOLEH, LANJUT LOAD DATA
+         setAuthChecking(false)
+         setMounted(true)
+         fetchData()
+      }
+    }
+    checkUser()
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener("mousedown", handleClickOutside); return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const isDark = mounted && (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))
   const activeLevels = useMemo(() => [lvl1, lvl2, lvl3, lvl4].filter(l => l !== ''), [lvl1, lvl2, lvl3, lvl4])
   const { pivotData, visibleRows, getHeaderInfo } = usePivotLogic({ data, expandedCols, expandedRows, activeLevels })
-  
   const trendData = useMemo(() => { const map:any = {}; chartData.forEach(i => { const k = i.year; if(!map[k]) map[k] = { name: k, total: 0 }; map[k].total += i.total_amount; map[k][i.month] = (map[k][i.month]||0) + i.total_amount }); return Object.values(map).sort((a:any,b:any)=>a.name-b.name) }, [chartData])
 
   const fetchData = React.useCallback(async () => {
+    // Jangan fetch jika masih checking auth
+    if (authChecking) return;
+
     setLoading(true); 
     const getP = (arr:string[]) => (arr.includes('All') || !arr.length) ? null : arr[0]; 
     const rpcArgs = { p_year: getP(selYears), p_month: getP(selMonths), p_area: getP(selAreas), p_ba: getP(selBA), p_pss: getP(selPSS), p_kat: getP(selKAT), p_cust_group: getP(selCG), p_product: getP(selProd) }
@@ -173,22 +189,29 @@ export default function PivotPage() {
           supabase.rpc('get_sales_analytics', { lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd }), 
           supabase.rpc('get_sales_analytics', { lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'', filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd }) 
       ])
-      if (optRes.data) setOpts({ year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, ba: optRes.data.business_area, pss: optRes.data.pss, kat: optRes.data.key_account_type, products: optRes.data.product, cg: optRes.data.cust_group } as any)
+      if (optRes.data) setOpts({ year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, business_area: optRes.data.business_area, pss: optRes.data.pss, key_account_type: optRes.data.key_account_type, product: optRes.data.product, cust_group: optRes.data.cust_group } as any)
       if (dataRes.data) setData(dataRes.data); 
       if (chartRes.data) setChartData(chartRes.data)
     } catch (e) { console.error(e) } finally { setLoading(false) }
-  }, [selYears, selMonths, selAreas, selBA, selPSS, selKAT, selCG, selProd, lvl1, lvl2, lvl3, lvl4, supabase])
+  }, [selYears, selMonths, selAreas, selBA, selPSS, selKAT, selCG, selProd, lvl1, lvl2, lvl3, lvl4, supabase, authChecking]) // Add authChecking dependency
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData]); 
-  
+  useEffect(() => { if (!authChecking) fetchData() }, [fetchData, authChecking]); 
   useEffect(() => setExpandedRows({}), [lvl1, lvl2, lvl3, lvl4])
 
-  const handleUpdate = async () => { if(!confirm("Update Data dari Master?")) return; setIsRefreshing(true); const { error } = await supabase.rpc('refresh_sales_data'); if (!error) { await supabase.auth.refreshSession(); alert('Sukses Update DB'); fetchData(); } else alert('Gagal: '+error.message); setIsRefreshing(false) }
+  const handleUpdate = async () => { if(!confirm("Update Data dari Master?")) return; setIsRefreshing(true); const { error } = await supabase.rpc('refresh_sales_data'); if (!error) { await supabase.auth.refreshSession(); alert('Sukses Update DB'); fetchData(); } else alert('Gagal: '+error.message); setIsRefreshing(false); setMenuOpen(false) }
   const handleLogout = async () => { await supabase.auth.signOut(); router.refresh(); router.push('/login') }
   const fmt = (n: number) => n ? n.toLocaleString('id-ID') : '-'
   const yAxisFormatter = (value: number) => { if (value >= 1000000000) return (value / 1000000000).toFixed(1).replace(/\.0$/, '') + 'M'; if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M'; return value.toString() }
+
+  // IF AUTH CHECKING, SHOW BLANK / LOADER ONLY
+  if (authChecking) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-2">
+            <Loader2 className="animate-spin text-blue-600" size={32} />
+            <span className="text-slate-500 text-xs">Memeriksa Hak Akses...</span>
+        </div>
+    </div>
+  )
 
 return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-2 md:p-6 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300">
@@ -201,22 +224,52 @@ return (
         >
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
             <div><h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> Sales Analytics</h1><p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p></div>
-            <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                <button onClick={fetchData} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button>
-                <button onClick={handleUpdate} disabled={isRefreshing} className="px-3 py-1.5 bg-emerald-600 dark:bg-emerald-700 text-white text-xs font-bold rounded hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex gap-2 border border-emerald-600 dark:border-emerald-800"><Database size={14}/> {isRefreshing?'Updating...':'Update DB'}</button>
-                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                <button onClick={handleLogout} className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-100 dark:border-red-900/50 flex gap-2"><LogOut size={14}/> Logout</button>
+            
+            {/* ACTION BAR */}
+            <div className="flex items-center gap-2 relative">
+                <button onClick={fetchData} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800" title="Refresh Data"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button>
+                
+                {/* 3 DOTS MENU */}
+                <div className="relative" ref={menuRef}>
+                    <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><MoreVertical size={20} className="text-slate-600 dark:text-slate-300"/></button>
+                    {menuOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+                             <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
+                                <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
+                                <button onClick={() => router.push('/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
+                             </div>
+                             <div className="p-1.5">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
+                                <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
+                             </div>
+                             <div className="border-t border-slate-100 dark:border-slate-800 p-2 flex justify-between bg-slate-50 dark:bg-slate-800/50">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center h-full">Tema</div>
+                                <div className="flex bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-0.5">
+                                    {['light', 'dark', 'system'].map((m: any) => (
+                                        <button key={m} onClick={() => setTheme(m)} className={`p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${theme===m ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400'}`}>
+                                            {m==='light'?<Sun size={12}/>:m==='dark'?<Moon size={12}/>:<Laptop size={12}/>}
+                                        </button>
+                                    ))}
+                                </div>
+                             </div>
+                             <div className="border-t border-slate-100 dark:border-slate-800 p-1">
+                                <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"><LogOut size={14}/> <span>Logout</span></button>
+                             </div>
+                        </div>
+                    )}
+                </div>
             </div>
           </div>
+          
+          {/* FILTERS */}
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2"><MultiSelect label="Tahun" options={opts.year} selected={selYears} onChange={setSelYears} /><MultiSelect label="Bulan" optionsRaw={MONTH_OPTIONS} selected={selMonths} onChange={setSelMonths} /><MultiSelect label="Area" options={opts.areas} selected={selAreas} onChange={setSelAreas} /><MultiSelect label="Business Area" options={opts.ba} selected={selBA} onChange={setSelBA} /></div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2"><MultiSelect label="Key Account" options={opts.kat} selected={selKAT} onChange={setSelKAT} /><MultiSelect label="Product" options={opts.products} selected={selProd} onChange={setSelProd} /><MultiSelect label="PSS" options={opts.pss} selected={selPSS} onChange={setSelPSS} /><MultiSelect label="Cust Group" options={opts.cg} selected={selCG} onChange={setSelCG} /></div>
           </div>
         </div>
 
-        {/* 2. CHART - Z-INDEX DIUBAH MENJADI 30 */}
+        {/* 2. CHART */}
         {(chartData.length > 0 || loading || isRefreshing) && (
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative z-30 flex flex-col transition-colors min-h-87.5">
                 {(loading || isRefreshing) && (
@@ -229,7 +282,7 @@ return (
                   </div>
                 )}
                 <div className="flex items-center justify-between mb-2 border-b border-slate-50 dark:border-slate-800 pb-2"><div className="flex items-center gap-2"><BarChart3 size={18} className="text-indigo-600 dark:text-indigo-400"/><span className="text-sm font-bold text-slate-700 dark:text-slate-200">SALES PERFORMANCE</span></div></div>
-                <div className="h-80 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} /><XAxis dataKey="name" tick={{fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} /><YAxis tickFormatter={yAxisFormatter} tick={{fontSize:10, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} width={40} /><Tooltip cursor={{fill: isDark ? '#1e293b' : '#f8fafc'}} content={<CustomTooltip />} />{MONTH_OPTIONS.map((m, i) => <Bar key={m.value} dataKey={m.value} name={m.label} stackId="a" fill={MONTH_COLORS[i]} barSize={40} />)}</BarChart></ResponsiveContainer></div>
+                <div className="h-80 w-full min-w-0"><ResponsiveContainer width="100%" height="100%" minWidth={0}><BarChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} /><XAxis dataKey="name" tick={{fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} /><YAxis tickFormatter={yAxisFormatter} tick={{fontSize:10, fill: isDark ? '#94a3b8' : '#64748b'}} axisLine={false} tickLine={false} width={40} /><Tooltip cursor={{fill: isDark ? '#1e293b' : '#f8fafc'}} content={<CustomTooltip />} />{MONTH_OPTIONS.map((m, i) => <Bar key={m.value} dataKey={m.value} name={m.label} stackId="a" fill={MONTH_COLORS[i]} barSize={40} />)}</BarChart></ResponsiveContainer></div>
             </div>
         )}
 
