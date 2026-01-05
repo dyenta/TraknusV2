@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ArrowLeft, Search, Trash2, Filter, AlertCircle, CheckCircle2, Clock, LayoutList, Loader2 } from 'lucide-react'
+import { ArrowLeft, Search, Trash2, Filter, AlertCircle, CheckCircle2, Clock, LayoutList, Loader2, Flag } from 'lucide-react'
 
 export default function IssueSummaryPage() {
   const router = useRouter()
@@ -16,34 +16,16 @@ export default function IssueSummaryPage() {
   const [loading, setLoading] = useState(true)
   const [authChecking, setAuthChecking] = useState(true)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  
+  // --- STATE FILTER ---
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
+  const [filterPriority, setFilterPriority] = useState('All') // State Filter Baru
 
-  // --- CEK AKSES & FETCH DATA ---
-  useEffect(() => {
-    const checkUserAndFetch = async () => {
-        setAuthChecking(true)
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) { router.replace('/login'); return }
-
-        const email = user.email || ''
-        const isAllowed = email.endsWith('@traknus.co.id') || email === 'dyentadwian@gmail.com'
-
-        if (!isAllowed) {
-            router.replace('/sales-issues') // User tidak boleh masuk sini
-        } else {
-            setAuthChecking(false)
-            fetchIssues()
-        }
-    }
-    checkUserAndFetch()
-  }, [])
-
-  const fetchIssues = async () => {
-      if (issues.length === 0) setLoading(true)
+  // --- 1. DEFINISI FUNGSI FETCH DATA ---
+  const fetchIssues = useCallback(async () => {
+      setLoading(prev => prev || issues.length === 0)
       try {
-        // Mengambil data dari tabel sales_issues
         const { data, error } = await supabase
             .from('sales_issues')
             .select('*')
@@ -56,32 +38,33 @@ export default function IssueSummaryPage() {
       } finally { 
           setLoading(false) 
       }
-  }
+  }, [supabase, issues.length])
 
-  // --- UPDATE DATABASE (STATUS) ---
-  const handleStatusChange = async (id: number, newStatus: string) => {
-    setUpdatingId(id)
-    try {
-        // INI BAGIAN YANG MENGUPDATE DATABASE
-        const { error } = await supabase
-            .from('sales_issues')
-            .update({ status: newStatus })
-            .eq('id', id)
-            
-        if (error) throw error
+  // --- 2. CEK HAK AKSES & LOAD DATA ---
+  useEffect(() => {
+    const checkUserAndFetch = async () => {
+        setAuthChecking(true)
+        const { data: { user } } = await supabase.auth.getUser()
         
-        // Update Frontend agar sinkron
-        setIssues(prev => prev.map(item => 
-            item.id === id ? { ...item, status: newStatus } : item
-        ))
-    } catch (err: any) { 
-        alert('Gagal update status: ' + err.message) 
-    } finally { 
-        setUpdatingId(null) 
-    }
-  }
+        if (!user) { 
+            router.replace('/login')
+            return 
+        }
 
-  // --- DELETE DATABASE ---
+        const email = user.email || ''
+        const isAllowed = email.endsWith('@traknus.co.id') || email === 'dyentadwian@gmail.com'
+
+        if (!isAllowed) {
+            router.replace('/sales-issues')
+        } else {
+            setAuthChecking(false)
+            fetchIssues()
+        }
+    }
+    checkUserAndFetch()
+  }, []) 
+
+  // --- 3. ACTIONS (UPDATE & DELETE) ---
   const handleDelete = async (id: number) => {
     if(!confirm('Hapus data keluhan ini?')) return
     try {
@@ -93,15 +76,42 @@ export default function IssueSummaryPage() {
     }
   }
 
-  // --- HELPER UNTUK UI ---
+  const handleStatusChange = async (id: number, newStatus: string) => {
+    setUpdatingId(id)
+    try {
+        const { error } = await supabase
+            .from('sales_issues')
+            .update({ status: newStatus })
+            .eq('id', id)
+            
+        if (error) throw error
+        
+        setIssues(prev => prev.map(item => 
+            item.id === id ? { ...item, status: newStatus } : item
+        ))
+    } catch (err: any) { 
+        alert('Gagal update status: ' + err.message) 
+    } finally { 
+        setUpdatingId(null) 
+    }
+  }
+
+  // --- 4. LOGIC FILTERING (UPDATED) ---
   const filteredData = useMemo(() => {
     return issues.filter(item => {
+        // Filter Search
         const matchesSearch = item.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               item.description?.toLowerCase().includes(searchTerm.toLowerCase())
+        
+        // Filter Status
         const matchesStatus = filterStatus === 'All' || item.status === filterStatus
-        return matchesSearch && matchesStatus
+        
+        // Filter Priority (BARU)
+        const matchesPriority = filterPriority === 'All' || item.priority === filterPriority
+
+        return matchesSearch && matchesStatus && matchesPriority
     })
-  }, [issues, searchTerm, filterStatus])
+  }, [issues, searchTerm, filterStatus, filterPriority])
 
   const stats = useMemo(() => {
     return {
@@ -114,9 +124,9 @@ export default function IssueSummaryPage() {
 
   const getStatusColor = (status: string) => {
     switch(status) {
-        case 'Open': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
-        case 'In Progress': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800'
-        case 'Closed': return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+        case 'Open': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-700'
+        case 'In Progress': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700'
+        case 'Closed': return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-700'
         default: return 'bg-slate-100 text-slate-600 border-slate-200'
     }
   }
@@ -124,6 +134,8 @@ export default function IssueSummaryPage() {
   const getPriorityColor = (prio: string) => {
     return prio === 'Urgent' ? 'text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded' : prio === 'High' ? 'text-orange-600 font-semibold' : 'text-slate-600 dark:text-slate-400'
   }
+
+  const optionStyle = "bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-200"
 
   if (authChecking) {
       return (
@@ -181,15 +193,31 @@ export default function IssueSummaryPage() {
                     <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                     <input type="text" placeholder="Cari Customer / Isu..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none transition-colors" />
                 </div>
-                <div className="flex items-center gap-2">
-                    <Filter size={16} className="text-slate-400"/>
-                    <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none cursor-pointer hover:border-blue-400 transition-colors">
-                        <option value="All">Semua Status</option>
-                        <option value="Open">Open</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Closed">Closed</option>
-                    </select>
+                
+                {/* FILTER GROUP */}
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5">
+                        <Filter size={14} className="text-slate-400"/>
+                        {/* Status Filter */}
+                        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-700 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700 pr-2 mr-2">
+                            <option className={optionStyle} value="All">Semua Status</option>
+                            <option className={optionStyle} value="Open">Open</option>
+                            <option className={optionStyle} value="In Progress">In Progress</option>
+                            <option className={optionStyle} value="Closed">Closed</option>
+                        </select>
+                        
+                        {/* Priority Filter (BARU) */}
+                        <Flag size={14} className="text-slate-400"/>
+                        <select value={filterPriority} onChange={e=>setFilterPriority(e.target.value)} className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-700 dark:text-slate-200">
+                            <option className={optionStyle} value="All">Semua Prioritas</option>
+                            <option className={optionStyle} value="Low">Low</option>
+                            <option className={optionStyle} value="Normal">Normal</option>
+                            <option className={optionStyle} value="High">High</option>
+                            <option className={optionStyle} value="Urgent">Urgent</option>
+                        </select>
+                    </div>
                 </div>
+
             </div>
 
             {/* Table */}
@@ -200,7 +228,7 @@ export default function IssueSummaryPage() {
                             <th className="p-4 w-12">#</th>
                             <th className="p-4 w-32">Tanggal</th>
                             <th className="p-4 w-48">Customer</th>
-                            <th className="p-4">Masalah</th>
+                            <th className="p-4 min-w-75">Masalah</th>
                             <th className="p-4 w-24">Prioritas</th>
                             <th className="p-4 w-40">Status (Edit)</th>
                             <th className="p-4 w-20 text-center">Aksi</th>
@@ -214,7 +242,7 @@ export default function IssueSummaryPage() {
                         ) : (
                             filteredData.map((item, idx) => (
                                 <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                                    <td className="p-4 font-mono text-xs text-slate-400">{idx+1}</td>
+                                    <td className="p-4 font-mono text-xs text-slate-400 align-top">{idx+1}</td>
                                     <td className="p-4 whitespace-nowrap align-top">
                                         <div className="font-semibold text-xs">{new Date(item.created_at).toLocaleDateString('id-ID')}</div>
                                         <div className="text-[10px] text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
@@ -223,10 +251,15 @@ export default function IssueSummaryPage() {
                                         {item.customer_name}
                                         <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><span className="opacity-50">By:</span> {item.created_by || '-'}</div>
                                     </td>
-                                    <td className="p-4 align-top max-w-sm">
+                                    
+                                    {/* Deskripsi dengan Wrap Text */}
+                                    <td className="p-4 align-top min-w-75 max-w-lg whitespace-normal wrap-break-word">
                                         <div className="font-bold text-[10px] uppercase tracking-wider mb-1 text-slate-500 border border-slate-200 dark:border-slate-700 inline-block px-1.5 rounded">{item.issue_type}</div>
-                                        <div className="text-sm mt-1 leading-relaxed">{item.description}</div>
+                                        <div className="text-sm mt-1 leading-relaxed text-slate-700 dark:text-slate-300">
+                                            {item.description}
+                                        </div>
                                     </td>
+
                                     <td className="p-4 align-top"><span className={`text-xs ${getPriorityColor(item.priority)}`}>{item.priority}</span></td>
                                     <td className="p-4 align-top">
                                         <div className="relative">
@@ -239,9 +272,9 @@ export default function IssueSummaryPage() {
                                                 disabled={updatingId === item.id}
                                                 className={`w-full appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border cursor-pointer focus:ring-2 focus:ring-offset-1 focus:outline-none transition-all ${getStatusColor(item.status)} focus:ring-blue-400 disabled:opacity-70`}
                                             >
-                                                <option value="Open">Open</option>
-                                                <option value="In Progress">In Progress</option>
-                                                <option value="Closed">Closed</option>
+                                                <option className={optionStyle} value="Open">Open</option>
+                                                <option className={optionStyle} value="In Progress">In Progress</option>
+                                                <option className={optionStyle} value="Closed">Closed</option>
                                             </select>
                                             <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
                                                 <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>

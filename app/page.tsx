@@ -189,7 +189,7 @@ export default function PivotPage() {
           supabase.rpc('get_sales_analytics', { lvl1_field: lvl1, lvl2_field: lvl2, lvl3_field: lvl3, lvl4_field: lvl4, filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd }), 
           supabase.rpc('get_sales_analytics', { lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'', filter_years: selYears, filter_areas: selAreas, filter_months: selMonths.includes('All')?[]:selMonths.map(m=>parseInt(m)), filter_business_areas: selBA, filter_pss: selPSS, filter_key_account_types: selKAT, filter_cust_groups: selCG, filter_products: selProd }) 
       ])
-      if (optRes.data) setOpts({ year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, business_area: optRes.data.business_area, pss: optRes.data.pss, key_account_type: optRes.data.key_account_type, product: optRes.data.product, cust_group: optRes.data.cust_group } as any)
+      if (optRes.data) setOpts({ year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, ba: optRes.data.business_area, pss: optRes.data.pss, kat: optRes.data.key_account_type, products: optRes.data.product, cg: optRes.data.cust_group } as any)      
       if (dataRes.data) setData(dataRes.data); 
       if (chartRes.data) setChartData(chartRes.data)
     } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -234,15 +234,6 @@ return (
                     <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><MoreVertical size={20} className="text-slate-600 dark:text-slate-300"/></button>
                     {menuOpen && (
                         <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                             <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
-                                <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
-                                <button onClick={() => router.push('/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
-                             </div>
-                             <div className="p-1.5">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
-                                <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
-                             </div>
                              <div className="border-t border-slate-100 dark:border-slate-800 p-2 flex justify-between bg-slate-50 dark:bg-slate-800/50">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center h-full">Tema</div>
                                 <div className="flex bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-0.5">
@@ -252,6 +243,15 @@ return (
                                         </button>
                                     ))}
                                 </div>
+                             </div>
+                             <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
+                                <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
+                                <button onClick={() => router.push('/sales-issues/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
+                             </div>
+                             <div className="p-1.5">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
+                                <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
                              </div>
                              <div className="border-t border-slate-100 dark:border-slate-800 p-1">
                                 <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"><LogOut size={14}/> <span>Logout</span></button>
