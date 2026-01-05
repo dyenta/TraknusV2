@@ -231,31 +231,54 @@ return (
                 
                 {/* 3 DOTS MENU */}
                 <div className="relative" ref={menuRef}>
-                    <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><MoreVertical size={20} className="text-slate-600 dark:text-slate-300"/></button>
+                    <button onClick={() => setMenuOpen(!menuOpen)} className={`p-2 rounded-full transition-colors ${menuOpen ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                        <MoreVertical size={20} className="text-slate-600 dark:text-slate-300"/>
+                    </button>
+                    
                     {menuOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                             <div className="border-t border-slate-100 dark:border-slate-800 p-2 flex justify-between bg-slate-50 dark:bg-slate-800/50">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center h-full">Tema</div>
-                                <div className="flex bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-0.5">
-                                    {['light', 'dark', 'system'].map((m: any) => (
-                                        <button key={m} onClick={() => setTheme(m)} className={`p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${theme===m ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400'}`}>
-                                            {m==='light'?<Sun size={12}/>:m==='dark'?<Moon size={12}/>:<Laptop size={12}/>}
-                                        </button>
-                                    ))}
-                                </div>
-                             </div>
-                             <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
-                                <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
-                                <button onClick={() => router.push('/sales-issues/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
-                             </div>
-                             <div className="p-1.5">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
-                                <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
-                             </div>
-                             <div className="border-t border-slate-100 dark:border-slate-800 p-1">
-                                <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"><LogOut size={14}/> <span>Logout</span></button>
-                             </div>
+                        /* CONTAINER UTAMA:
+                           - Mobile: Fixed, Full Screen, Center Content, Black Overlay
+                           - Desktop (md): Absolute, Dropdown position, Transparent bg */
+                        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm md:absolute md:inset-auto md:top-full md:right-0 md:p-0 md:bg-transparent md:backdrop-blur-none md:block md:mt-2">
+                            
+                            {/* BACKDROP CLICK (Mobile Only): Klik area gelap untuk tutup */}
+                            <div className="absolute inset-0 md:hidden" onClick={() => setMenuOpen(false)}></div>
+
+                            {/* CARD MENU */}
+                            <div className="relative w-full max-w-xs md:w-64 bg-white dark:bg-slate-900 rounded-lg shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                 
+                                 {/* HEADER KHUSUS MOBILE (Agar user tahu cara menutup selain klik luar) */}
+                                 <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-800 md:hidden bg-slate-50 dark:bg-slate-800/50">
+                                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200">Menu Opsi</span>
+                                    <button onClick={() => setMenuOpen(false)} className="p-1 bg-slate-200 dark:bg-slate-700 rounded-full text-slate-500 hover:text-red-500 transition-colors">
+                                        <X size={16} />
+                                    </button>
+                                 </div>
+
+                                 {/* --- KONTEN MENU ASLI --- */}
+                                 <div className="border-t border-slate-100 dark:border-slate-800 p-2 flex justify-between bg-slate-50 dark:bg-slate-800/50">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center h-full">Tema</div>
+                                    <div className="flex bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-0.5">
+                                        {['light', 'dark', 'system'].map((m: any) => (
+                                            <button key={m} onClick={() => setTheme(m)} className={`p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${theme===m ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400'}`}>
+                                                {m==='light'?<Sun size={12}/>:m==='dark'?<Moon size={12}/>:<Laptop size={12}/>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                 </div>
+                                 <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
+                                    <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
+                                    <button onClick={() => router.push('/sales-issues/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
+                                 </div>
+                                 <div className="p-1.5">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
+                                    <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
+                                 </div>
+                                 <div className="border-t border-slate-100 dark:border-slate-800 p-1">
+                                    <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"><LogOut size={14}/> <span>Logout</span></button>
+                                 </div>
+                            </div>
                         </div>
                     )}
                 </div>
