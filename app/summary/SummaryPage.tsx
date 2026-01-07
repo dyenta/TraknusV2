@@ -220,7 +220,7 @@ export default function SummaryPage() {
         <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
                 <button 
-                    onClick={() => router.back()} 
+                    onClick={() => router.push('/')} 
                     className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"
                 >
                     <ArrowLeft size={20} />
