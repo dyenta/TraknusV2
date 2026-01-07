@@ -3,14 +3,16 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ArrowLeft, Search, Trash2, LayoutList, CheckCircle2, Loader2, User, Edit3, X, Save, Mail, Users } from 'lucide-react'
+// 1. Tambahkan 'Hash' ke dalam import
+import { ArrowLeft, Search, Trash2, LayoutList, CheckCircle2, Loader2, User, Edit3, X, Save, Mail, Users, Hash } from 'lucide-react'
 
 // --- INTERFACE ---
 interface Issue {
   id: number
   created_at: string
   customer_name: string
-  cust_group: string | null // 1. Field Baru
+  cust_group: string | null
+  unit_number: string | null // 2. Tambahkan Field Unit Number
   issue_type: string
   description: string
   priority: string
@@ -77,7 +79,7 @@ export default function IssueSummaryPage() {
       try {
         const { data, error } = await supabase
             .from('sales_issues')
-            // Select all columns (termasuk cust_group yang baru ditambah)
+            // Select all columns (akan otomatis mengambil unit_number jika ada di DB)
             .select(`*, profiles (full_name, email, phone_number)`)
             .order('created_at', { ascending: false })
         
@@ -189,7 +191,8 @@ export default function IssueSummaryPage() {
     return issues.filter(item => {
         const s = searchTerm.toLowerCase()
         const matchSearch = item.customer_name?.toLowerCase().includes(s) || 
-                            item.profiles?.full_name?.toLowerCase().includes(s)
+                            item.profiles?.full_name?.toLowerCase().includes(s) ||
+                            item.unit_number?.toLowerCase().includes(s) // Tambahkan search by unit number
         const matchStatus = filterStatus === 'All' || item.status === filterStatus
         return matchSearch && matchStatus
     })
@@ -213,7 +216,7 @@ export default function IssueSummaryPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* 2. Header dengan Tombol Back */}
+        {/* Header dengan Tombol Back */}
         <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
                 <button 
@@ -286,11 +289,10 @@ export default function IssueSummaryPage() {
                                     <div className="text-xs text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
                                 </td>
 
-                                {/* 2. Customer & Sales (Updated dengan Cust Group) */}
+                                {/* 2. Customer & Sales */}
                                 <td className="p-4 align-top">
                                     <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
                                     
-                                    {/* 3. Tampilkan Customer Group jika ada */}
                                     {item.cust_group && (
                                         <div className="mt-1 mb-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                                             <Users size={10} /> {item.cust_group}
@@ -315,6 +317,9 @@ export default function IssueSummaryPage() {
                                     <div>
                                         <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
                                             Keluhan : {item.issue_type}
+                                        </div>
+                                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
+                                            Unit Number : {item.unit_number}
                                         </div>
                                         <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word text-sm">
                                             {item.description}
@@ -392,7 +397,14 @@ export default function IssueSummaryPage() {
 
                     <div className="p-6 space-y-4">
                         <div className="bg-slate-50 p-3 rounded text-sm text-slate-600 border mb-2">
-                            <span className="font-bold">{selectedIssue.customer_name}</span><br/>
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="font-bold">{selectedIssue.customer_name}</span>
+                                {selectedIssue.unit_number && (
+                                    <span className="text-xs bg-white border px-1.5 py-0.5 rounded font-mono">
+                                        {selectedIssue.unit_number}
+                                    </span>
+                                )}
+                            </div>
                             {selectedIssue.description}
                         </div>
 

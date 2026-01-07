@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, FileWarning, User, AlignLeft, AlertCircle, Users } from 'lucide-react' // LogOut dihapus dari import karena tidak dipakai
+import { ArrowLeft, Save, FileWarning, User, AlignLeft, AlertCircle, Users, Hash } from 'lucide-react' 
 import { createBrowserClient } from '@supabase/ssr'
 
 export default function SalesIssuesPage() {
@@ -15,13 +15,13 @@ export default function SalesIssuesPage() {
   const [loading, setLoading] = useState(false)
   const [isRestricted, setIsRestricted] = useState(false)
   
-  // State untuk menyimpan daftar customer unik
   const [customerList, setCustomerList] = useState<{name: string, group: string}[]>([])
 
   const [formData, setFormData] = useState({
     customer_name: '',
     cust_group: '', 
-    issue_type: 'PO belum tersuplai',
+    unit_number: '', 
+    issue_type: '', // PERUBAHAN 1: Default kosong agar user wajib memilih
     description: '',
     created_by: ''
   })
@@ -34,7 +34,6 @@ export default function SalesIssuesPage() {
         if (user) {
             const email = user.email || ''
             setFormData(prev => ({ ...prev, created_by: email }))
-            // Logika restricted tetap ada untuk keperluan logic submit, tapi tidak lagi membatasi UI tombol kembali
             const isAllowed = email.endsWith('@traknus.co.id') || email === 'dyentadwian@gmail.com'
             setIsRestricted(!isAllowed)
         } else {
@@ -67,7 +66,6 @@ export default function SalesIssuesPage() {
     initData()
   }, [])
 
-  // 2. Handle Change Customer (Auto-fill Group)
   const handleCustomerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     const found = customerList.find(c => c.name === val)
@@ -83,12 +81,6 @@ export default function SalesIssuesPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  // Fungsi logout dihapus dari UI, tapi logic bisa tetap ada jika dibutuhkan di tempat lain
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -100,21 +92,15 @@ export default function SalesIssuesPage() {
       
       alert('Keluhan berhasil disimpan!')
 
-      // Logic Redirect:
-      // Karena hak akses ditambahkan, mungkin Anda ingin non-admin juga redirect ke home ('/') 
-      // daripada reset form. Jika iya, ubah logika di bawah ini.
       if (isRestricted) {
-          // Opsi A: Tetap reset form (biarkan seperti kode lama)
           setFormData({
             customer_name: '',
             cust_group: '',
-            issue_type: 'PO belum tersuplai',
+            unit_number: '', 
+            issue_type: '', // Reset kembali ke kosong
             description: '',
             created_by: formData.created_by
           })
-          
-          // Opsi B: Jika ingin redirect juga setelah simpan, uncomment baris bawah:
-          // router.push('/') 
       } else {
           router.push('/')
       }
@@ -133,14 +119,12 @@ export default function SalesIssuesPage() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* PERUBAHAN 1: Tombol Kembali sekarang muncul untuk SEMUA user (kondisi !isRestricted dihapus) */}
             <button 
                 onClick={() => router.back()} 
                 className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"
             >
                 <ArrowLeft size={20} />
             </button>
-
             <div>
                 <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                 <FileWarning className="text-red-500" size={24}/> Input Keluhan Customer
@@ -148,17 +132,14 @@ export default function SalesIssuesPage() {
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Isi formulir sesuai keluhan yang diterima.</p>
             </div>
           </div>
-          
-          {/* PERUBAHAN 2: Tombol Logout DIHILANGKAN sesuai permintaan */}
-          {/* Code blok logout sebelumnya dihapus dari sini */}
         </div>
 
         {/* Form Card */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 md:p-8 flex flex-col gap-6">
             
+            {/* Baris 1: Customer & Group */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Customer Name */}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
                   <User size={12}/> Customer Name
@@ -181,7 +162,6 @@ export default function SalesIssuesPage() {
                 </datalist>
               </div>
 
-              {/* Cust Group */}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
                   <Users size={12}/> Cust. Group
@@ -197,21 +177,42 @@ export default function SalesIssuesPage() {
               </div>
             </div>
 
-            {/* Issue Type */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
-                <AlertCircle size={12}/> Issue Type
-              </label>
-              <select 
-                name="issue_type"
-                value={formData.issue_type}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white transition-all text-sm"
-              >
-                <option value="PO belum tersuplai">PO belum tersuplai</option>
-                <option value="Pengajuan Warranty">Pengajuan Warranty</option>
-                <option value="Other">Other</option>
-              </select>
+            {/* Baris 2: Unit Number & Issue Type */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Input Unit Number */}
+                <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                        <Hash size={12}/> Unit Number
+                    </label>
+                    <input 
+                        type="text" 
+                        required // PERUBAHAN 2: Wajib diisi
+                        name="unit_number"
+                        value={formData.unit_number}
+                        onChange={handleChange}
+                        placeholder="Contoh: UN-2024-001"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white transition-all text-sm"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                        <AlertCircle size={12}/> Issue Type
+                    </label>
+                    <select 
+                        required // PERUBAHAN 3: Wajib dipilih
+                        name="issue_type"
+                        value={formData.issue_type}
+                        onChange={handleChange}
+                        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm ${formData.issue_type === '' ? 'text-slate-400' : 'dark:text-white'}`}
+                    >
+                        {/* PERUBAHAN 4: Opsi Placeholder */}
+                        <option value="" disabled>Pilih Issue Type</option>
+                        <option value="PO belum tersuplai">PO belum tersuplai</option>
+                        <option value="Pengajuan Warranty">Pengajuan Warranty</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
             </div>
 
             {/* Description */}
@@ -235,7 +236,6 @@ export default function SalesIssuesPage() {
 
             {/* Actions */}
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-              {/* PERUBAHAN 3: Tombol Batal muncul untuk SEMUA user */}
               <button 
                   type="button" 
                   onClick={() => router.back()}
