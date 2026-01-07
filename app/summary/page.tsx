@@ -3,13 +3,14 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ArrowLeft, Search, Trash2, Filter, AlertCircle, CheckCircle2, Clock, LayoutList, Loader2, Building2, User, Edit3, X, Save, Mail } from 'lucide-react'
+import { ArrowLeft, Search, Trash2, LayoutList, CheckCircle2, Loader2, User, Edit3, X, Save, Mail, Users } from 'lucide-react'
 
 // --- INTERFACE ---
 interface Issue {
   id: number
   created_at: string
   customer_name: string
+  cust_group: string | null // 1. Field Baru
   issue_type: string
   description: string
   priority: string
@@ -18,7 +19,7 @@ interface Issue {
   
   // Field Tracking & Respon
   admin_response: string | null
-  admin_name: string | null // Menyimpan nama admin
+  admin_name: string | null
   first_response_at: string | null
   resolved_at: string | null
   
@@ -76,7 +77,7 @@ export default function IssueSummaryPage() {
       try {
         const { data, error } = await supabase
             .from('sales_issues')
-            // Kita select semua kolom, termasuk admin_name yang baru dibuat
+            // Select all columns (termasuk cust_group yang baru ditambah)
             .select(`*, profiles (full_name, email, phone_number)`)
             .order('created_at', { ascending: false })
         
@@ -100,7 +101,6 @@ export default function IssueSummaryPage() {
             return 
         }
 
-        // Cek apakah user adalah Admin (Traknus / Email Khusus)
         const email = user.email || ''
         const isTraknus = email.endsWith('@traknus.co.id')
         const isSuperAdmin = email === 'dyentadwian@gmail.com'
@@ -131,17 +131,14 @@ export default function IssueSummaryPage() {
       setIsModalOpen(true)
   }
 
-  // --- SIMPAN RESPON (Logic Ambil Nama Admin dari Profile) ---
   const handleSaveResponse = async () => {
       if (!selectedIssue) return
       setSaving(true)
       
       try {
-          // 1. Ambil User ID Admin yang sedang login
           const { data: { user } } = await supabase.auth.getUser()
           if (!user) throw new Error('Sesi habis, silakan login ulang')
 
-          // 2. AMBIL NAMA ADMIN DARI TABEL PROFILES (Sesuai Request)
           let currentAdminName = 'Admin'
           const { data: profileData } = await supabase
             .from('profiles')
@@ -153,15 +150,13 @@ export default function IssueSummaryPage() {
               currentAdminName = profileData.full_name
           }
 
-          // 3. Siapkan Data Update
           const now = new Date().toISOString()
           const updates: any = {
               status: editForm.status,
               admin_response: editForm.admin_response,
-              admin_name: currentAdminName // Simpan nama yang diambil tadi
+              admin_name: currentAdminName 
           }
 
-          // Logic KPI Waktu
           if (!selectedIssue.first_response_at) {
               updates.first_response_at = now
           }
@@ -172,7 +167,6 @@ export default function IssueSummaryPage() {
               updates.resolved_at = null
           }
 
-          // 4. Eksekusi Update ke Database
           const { error } = await supabase
               .from('sales_issues')
               .update(updates)
@@ -180,7 +174,6 @@ export default function IssueSummaryPage() {
 
           if (error) throw error
 
-          // Update State Lokal
           setIssues(prev => prev.map(item => item.id === selectedIssue.id ? { ...item, ...updates } : item))
           setIsModalOpen(false)
 
@@ -220,12 +213,21 @@ export default function IssueSummaryPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header */}
+        {/* 2. Header dengan Tombol Back */}
         <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-                <LayoutList className="text-indigo-500"/> Summary Keluhan
-            </h1>
-            <button onClick={() => router.push('/sales-issues')} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700">
+            <div className="flex items-center gap-3">
+                <button 
+                    onClick={() => router.back()} 
+                    className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"
+                >
+                    <ArrowLeft size={20} />
+                </button>
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                    <LayoutList className="text-indigo-500"/> Summary Keluhan
+                </h1>
+            </div>
+            
+            <button onClick={() => router.push('/sales-issues')} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm">
                 + Input Baru
             </button>
         </div>
@@ -251,9 +253,9 @@ export default function IssueSummaryPage() {
             <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                 <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} 
-                    className="w-full pl-9 pr-4 py-2 bg-white rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    className="w-full pl-9 pr-4 py-2 bg-white rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm"/>
             </div>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-white px-4 py-2 rounded-lg border">
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-white px-4 py-2 rounded-lg border text-sm">
                 <option value="All">Semua Status</option>
                 <option value="Open">Open</option>
                 <option value="Closed">Closed</option>
@@ -269,7 +271,6 @@ export default function IssueSummaryPage() {
                             <th className="p-4">Tanggal Input</th>
                             <th className="p-4">Customer & Sales</th>
                             <th className="p-4 w-1/3">Detail Masalah</th>
-                            {/* SYARAT 1: KPI HANYA MUNCUL JIKA ADMIN */}
                             {isAdmin && <th className="p-4 bg-slate-100 dark:bg-slate-800/50">KPI Waktu</th>}
                             <th className="p-4">Status</th>
                             <th className="p-4 text-center">Aksi</th>
@@ -285,11 +286,18 @@ export default function IssueSummaryPage() {
                                     <div className="text-xs text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
                                 </td>
 
-                                {/* 2. Customer & Sales (SYARAT 4: Email Ditampilkan) */}
+                                {/* 2. Customer & Sales (Updated dengan Cust Group) */}
                                 <td className="p-4 align-top">
-                                    <div className="font-bold text-slate-800 dark:text-slate-100 mb-2">{item.customer_name}</div>
+                                    <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
                                     
-                                    <div className="flex flex-col gap-0.5 border-l-2 border-slate-200 pl-2">
+                                    {/* 3. Tampilkan Customer Group jika ada */}
+                                    {item.cust_group && (
+                                        <div className="mt-1 mb-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                                            <Users size={10} /> {item.cust_group}
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-col gap-0.5 border-l-2 border-slate-200 pl-2 mt-1">
                                         <div className="flex items-center gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">
                                             <User size={12}/> {item.profiles?.full_name || 'Tanpa Nama'}
                                         </div>
@@ -302,20 +310,17 @@ export default function IssueSummaryPage() {
                                     </div>
                                 </td>
 
-                                {/* 3. Masalah & Respon (SYARAT 2 & 3: Wrap Text & Issue Type Placement) */}
+                                {/* 3. Masalah & Respon */}
                                 <td className="p-4 align-top space-y-3">
-                                    {/* Masalah */}
                                     <div>
                                         <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
                                             Keluhan : {item.issue_type}
                                         </div>
-                                        {/* Class whitespace-normal dan break-words AGAR TURUN KE BAWAH */}
                                         <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word text-sm">
                                             {item.description}
                                         </div>
                                     </div>
                                     
-                                    {/* Respon Admin (SYARAT 5: Judul Ganti Nama Admin) */}
                                     {item.admin_response && (
                                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
                                             <div className="text-[11px] font-bold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1.5">
@@ -329,7 +334,7 @@ export default function IssueSummaryPage() {
                                     )}
                                 </td>
 
-                                {/* 4. KPI Waktu (SYARAT 1: HANYA ADMIN) */}
+                                {/* 4. KPI Waktu */}
                                 {isAdmin && (
                                     <td className="p-4 align-top whitespace-nowrap bg-slate-50/50 dark:bg-slate-800/20">
                                         <div className="space-y-3">
