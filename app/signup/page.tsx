@@ -3,13 +3,16 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-// 1. Tambahkan import Eye dan EyeOff
-import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+// 1. Update import icons: Tambahkan User dan Phone
+import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, User, Phone } from 'lucide-react'
 
 export default function SignUpPage() {
+  // 2. Tambahkan state baru
+  const [displayName, setDisplayName] = useState('')
+  const [phone, setPhone] = useState('')
+  
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  // 2. Tambahkan state untuk visibilitas password
   const [showPassword, setShowPassword] = useState(false)
   
   const [loading, setLoading] = useState(false)
@@ -25,18 +28,27 @@ export default function SignUpPage() {
     setLoading(true)
     setMsg(null)
     
+    // 3. Update logic sign up untuk menyertakan metadata
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${location.origin}/auth/callback`,
+        // Data tambahan disimpan di user_metadata
+        data: {
+          full_name: displayName,
+          phone_number: phone,
+        }
       }
     })
 
     if (error) {
       setMsg({ type: 'error', text: error.message })
     } else {
-      setMsg({ type: 'success', text: 'Sukses! Cek inbox email Anda.' })
+      setMsg({ type: 'success', text: 'Sukses! Cek inbox email Anda untuk verifikasi.' })
+      // Reset semua form
+      setDisplayName('')
+      setPhone('')
       setEmail('')
       setPassword('')
     }
@@ -53,7 +65,7 @@ export default function SignUpPage() {
             <UserPlus size={24} />
           </div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Buat Akun Baru</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Bergabung untuk melihat data penjualan</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Lengkapi data diri untuk bergabung</p>
         </div>
 
         <div className="p-8">
@@ -68,7 +80,45 @@ export default function SignUpPage() {
             </div>
           )}
 
-          <form onSubmit={handleSignUp} className="space-y-5">
+          <form onSubmit={handleSignUp} className="space-y-4">
+            
+            {/* INPUT: Display Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 ml-1">Nama Lengkap</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                  <User size={18} />
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Budi Santoso"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                />
+              </div>
+            </div>
+
+            {/* INPUT: Phone Number */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 ml-1">Nomor Telepon</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                  <Phone size={18} />
+                </div>
+                <input
+                  type="tel"
+                  required
+                  placeholder="08123456789"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                />
+              </div>
+            </div>
+
+            {/* INPUT: Email */}
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 ml-1">Email Perusahaan</label>
               <div className="relative">
@@ -86,6 +136,7 @@ export default function SignUpPage() {
               </div>
             </div>
 
+            {/* INPUT: Password */}
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 ml-1">Password</label>
               <div className="relative">
@@ -93,18 +144,15 @@ export default function SignUpPage() {
                   <Lock size={18} />
                 </div>
                 
-                {/* 3. Input Password dimodifikasi */}
                 <input
-                  type={showPassword ? "text" : "password"} // Ubah tipe input
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  // Ubah pr-4 menjadi pr-10 agar teks tidak tertutup ikon mata
                   className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
                 />
 
-                {/* 4. Tombol Toggle Show/Hide */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -120,7 +168,7 @@ export default function SignUpPage() {
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-4"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : 'Daftar Sekarang'}
             </button>
