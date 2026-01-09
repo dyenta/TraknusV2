@@ -61,9 +61,7 @@ export default function SignUpPage() {
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors duration-300">
         
         <div className="p-8 text-center border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 mb-4 shadow-sm">
-            <UserPlus size={24} />
-          </div>
+          <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-15 h-15 rounded-xl mb-4 shadow-sm"/>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Buat Akun Baru</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Lengkapi data diri untuk bergabung</p>
         </div>

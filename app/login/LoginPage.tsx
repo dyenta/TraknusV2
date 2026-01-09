@@ -47,9 +47,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors duration-300">
         
         <div className="p-8 text-center border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 mb-4 shadow-sm">
-            <LayoutGrid size={24} />
-          </div>
+          <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-15 h-15 rounded-xl mb-4 shadow-sm"/>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Welcome Back</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Masuk untuk mengakses Dashboard</p>
         </div>

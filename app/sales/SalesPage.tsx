@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2, MoreVertical, FileText, LayoutList } from 'lucide-react'
+import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -405,7 +405,7 @@ return (
           className={`bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4 relative transition-colors ${activeLayer === 'top' ? 'z-50' : 'z-40'}`}
         >
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-            <div><h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> Sales Analytics</h1><p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p></div>
+            <div><h1 className="text-xl font-bold flex items-center gap-2"><LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> Dashboard Sales</h1><p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p></div>
             
             <div className="flex items-center gap-2 relative">
                 <button onClick={fetchData} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800" title="Refresh Data"><RefreshCcw size={16} className={loading?"animate-spin":""}/></button>
@@ -431,15 +431,15 @@ return (
                                  </div>
                                  <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
-                                    <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileText size={14} className="text-blue-500"/> <span>Input Keluhan Baru</span></button>
-                                    <button onClick={() => router.push('/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-purple-500"/> <span>Lihat Summary Keluhan</span></button>
+                                    <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileWarning size={14} className="text-red-400"/> <span>Input Keluhan Baru</span></button>
+                                    <button onClick={() => router.push('/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-emerald-500"/> <span>Lihat Summary Keluhan</span></button>
                                  </div>
                                  <div className="p-1.5">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
-                                    <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-emerald-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
+                                    <button onClick={handleUpdate} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-purple-500"/> <span>{isRefreshing?'Updating...':'Update Database'}</span></button>
                                  </div>
                                  <div className="border-t border-slate-100 dark:border-slate-800 p-1">
-                                    <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"><LogOut size={14}/> <span>Menu</span></button>
+                                    <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-blue-500 rounded transition-colors"><LogOut size={14}/> <span>Menu</span></button>
                                  </div>
                             </div>
                         </div>

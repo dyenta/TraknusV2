@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-// 1. Tambahkan 'Hash' ke dalam import
-import { ArrowLeft, Search, Trash2, LayoutList, CheckCircle2, Loader2, User, Edit3, X, Save, Mail, Users, Hash } from 'lucide-react'
+import { 
+  ArrowLeft, Search, Trash2, LayoutList, Loader2, User, 
+  X, Send, Mail, Phone, Users, Hash, Paperclip, ExternalLink, MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle
+} from 'lucide-react'
 
 // --- INTERFACE ---
 interface Issue {
@@ -12,25 +14,31 @@ interface Issue {
   created_at: string
   customer_name: string
   cust_group: string | null
-  unit_number: string | null // 2. Tambahkan Field Unit Number
+  unit_number: string | null
   issue_type: string
   description: string
-  priority: string
   status: string
-  user_id: string
+  attachment_url: string | null 
   
-  // Field Tracking & Respon
-  admin_response: string | null
-  admin_name: string | null
+  // Tracking
   first_response_at: string | null
   resolved_at: string | null
+  admin_name: string | null
   
-  // Data Profil Pembuat
+  // Data Profil
   profiles: {
     full_name: string | null
     email: string | null
     phone_number: string | null
   } | null
+}
+
+interface Comment {
+  id: number
+  sender_name: string
+  message: string
+  created_at: string
+  is_admin: boolean
 }
 
 export default function SummaryPage() {
@@ -43,43 +51,97 @@ export default function SummaryPage() {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [authChecking, setAuthChecking] = useState(true)
-  
-  // State Role Admin
+  const [currentUserEmail, setCurrentUserEmail] = useState('')
+  const [currentUserName, setCurrentUserName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
 
-  // State Modal
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  // State Modal Chat
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
-  const [editForm, setEditForm] = useState({ status: '', admin_response: '' })
-  const [saving, setSaving] = useState(false)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   // Filter
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
 
-  // --- HELPER DURASI ---
+  // --- HELPER SCROLL ---
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  // --- HELPER UNTUK NAMA FILE DARI URL ---
+  const getFileNameFromUrl = (url: string) => {
+    try {
+        const decoded = decodeURIComponent(url)
+        return decoded.split('/').pop() || 'Attachment'
+    } catch {
+        return 'Attachment'
+    }
+  }
+
+  // --- HELPER RENDER ATTACHMENTS ---
+  const renderAttachments = (attachmentUrl: string | null) => {
+    if (!attachmentUrl) return null
+
+    let urls: string[] = []
+    
+    try {
+        const parsed = JSON.parse(attachmentUrl)
+        if (Array.isArray(parsed)) {
+            urls = parsed
+        } else {
+            urls = [attachmentUrl]
+        }
+    } catch (e) {
+        urls = [attachmentUrl]
+    }
+
+    return (
+        <div className="mt-2 flex flex-wrap gap-2">
+            {urls.map((url, idx) => (
+                <a 
+                    key={idx} 
+                    href={url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    title={getFileNameFromUrl(url)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold hover:bg-blue-100 transition-colors max-w-50"
+                >
+                    <Paperclip size={10} className="shrink-0"/> 
+                    <span className="truncate">{getFileNameFromUrl(url)}</span>
+                </a>
+            ))}
+        </div>
+    )
+  }
+
+  // --- HELPER KPI DURATION ---
   const calculateDuration = (startStr: string, endStr: string | null) => {
-    if (!startStr || !endStr) return '-'
+    if (!endStr) return '-'
     const start = new Date(startStr).getTime()
     const end = new Date(endStr).getTime()
     const diffMs = end - start
-    if (diffMs < 0) return '-'
-
-    const diffHrs = Math.floor(diffMs / 3600000)
-    const diffMins = Math.floor((diffMs % 3600000) / 60000)
     
-    if (diffHrs > 24) return `${Math.floor(diffHrs / 24)} hari ${diffHrs % 24} jam`
-    if (diffHrs > 0) return `${diffHrs} jam ${diffMins} mnt`
-    return `${diffMins} menit`
+    if (diffMs < 0) return '0m'
+
+    const minutes = Math.floor(diffMs / 60000)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (days > 0) return `${days}h ${hours % 24}j`
+    if (hours > 0) return `${hours}j ${minutes % 60}m`
+    return `${minutes} mnt`
   }
 
-  // --- FETCH DATA ---
+  // --- FETCH ISSUES ---
   const fetchIssues = useCallback(async () => {
       setLoading(prev => prev || issues.length === 0)
       try {
         const { data, error } = await supabase
             .from('sales_issues')
-            // Select all columns (akan otomatis mengambil unit_number jika ada di DB)
             .select(`*, profiles (full_name, email, phone_number)`)
             .order('created_at', { ascending: false })
         
@@ -92,7 +154,7 @@ export default function SummaryPage() {
       }
   }, [supabase, issues.length])
 
-  // --- CEK AUTH & ROLE ---
+  // --- AUTH CHECK ---
   useEffect(() => {
     const init = async () => {
         setAuthChecking(true)
@@ -104,10 +166,15 @@ export default function SummaryPage() {
         }
 
         const email = user.email || ''
-        const isTraknus = email.endsWith('@traknus.co.id')
-        const isSuperAdmin = email === 'dyentadwian@gmail.com'
+        setCurrentUserEmail(email)
         
+        const isTraknus = email.endsWith('@traknus.co.id')
+        const isSuperAdmin = email === 'dyentadwian@gmail.com' 
         setIsAdmin(isTraknus || isSuperAdmin)
+
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+        setCurrentUserName(profile?.full_name || email.split('@')[0])
+
         setAuthChecking(false)
         fetchIssues()
     }
@@ -115,8 +182,45 @@ export default function SummaryPage() {
   }, []) 
 
   // --- ACTIONS ---
+
+  // 1. Refresh Komentar
+  const refreshComments = async (id: number) => {
+    const { data } = await supabase
+      .from('issue_comments')
+      .select('*')
+      .eq('issue_id', id)
+      .order('created_at', { ascending: true })
+    
+    if (data) setComments(data)
+    setTimeout(scrollToBottom, 100)
+  }
+
+  // 2. Helper Update Status & Send System Message
+  const updateStatus = async (id: number, status: string, extraFields: any = {}) => {
+      const { error } = await supabase.from('sales_issues').update({ status, ...extraFields }).eq('id', id)
+      if (error) {
+          alert('Gagal update status: ' + error.message)
+          return
+      }
+      // Update local state
+      setIssues(prev => prev.map(i => i.id === id ? { ...i, status, ...extraFields } : i))
+      setSelectedIssue(prev => prev ? { ...prev, status, ...extraFields } : null)
+  }
+
+  const sendSystemMessage = async (msg: string) => {
+      if(!selectedIssue) return
+      await supabase.from('issue_comments').insert({
+          issue_id: selectedIssue.id,
+          message: msg,
+          sender_name: 'System',
+          is_admin: true
+      })
+      refreshComments(selectedIssue.id)
+  }
+
+  // 3. Delete Issue
   const handleDelete = async (id: number) => {
-    if(!confirm('Hapus data ini?')) return
+    if(!confirm('Hapus tiket ini beserta riwayat chatnya?')) return
     try {
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
@@ -124,66 +228,79 @@ export default function SummaryPage() {
     } catch (err: any) { alert('Gagal hapus: ' + err.message) }
   }
 
-  const handleOpenEdit = (issue: Issue) => {
+  // 4. Open Chat
+  const handleOpenChat = async (issue: Issue) => {
       setSelectedIssue(issue)
-      setEditForm({
-          status: issue.status,
-          admin_response: issue.admin_response || ''
-      })
-      setIsModalOpen(true)
+      setIsChatOpen(true)
+      setComments([]) 
+      refreshComments(issue.id)
   }
 
-  const handleSaveResponse = async () => {
-      if (!selectedIssue) return
-      setSaving(true)
-      
+  // 5. Send Message (Auto Status In Progress if Admin)
+  const handleSendMessage = async (e?: React.FormEvent) => {
+      e?.preventDefault()
+      if (!newMessage.trim() || !selectedIssue) return
+      if (selectedIssue.status === 'Closed') return
+
+      setSending(true)
       try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) throw new Error('Sesi habis, silakan login ulang')
+          await supabase.from('issue_comments').insert({
+              issue_id: selectedIssue.id,
+              message: newMessage,
+              sender_name: currentUserName,
+              is_admin: isAdmin
+          })
 
-          let currentAdminName = 'Admin'
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .single()
-            
-          if (profileData?.full_name) {
-              currentAdminName = profileData.full_name
+          // Logic: Jika Admin balas tiket OPEN -> In Progress & Catat Waktu Respon
+          if (isAdmin && selectedIssue.status === 'Open') {
+              const now = new Date().toISOString()
+              const extraFields = !selectedIssue.first_response_at 
+                ? { first_response_at: now, admin_name: currentUserName } 
+                : { admin_name: currentUserName }
+                
+              await updateStatus(selectedIssue.id, 'In Progress', extraFields)
           }
 
-          const now = new Date().toISOString()
-          const updates: any = {
-              status: editForm.status,
-              admin_response: editForm.admin_response,
-              admin_name: currentAdminName 
-          }
-
-          if (!selectedIssue.first_response_at) {
-              updates.first_response_at = now
-          }
-          if (editForm.status === 'Closed' && selectedIssue.status !== 'Closed') {
-              updates.resolved_at = now
-          }
-          if (editForm.status !== 'Closed' && selectedIssue.status === 'Closed') {
-              updates.resolved_at = null
-          }
-
-          const { error } = await supabase
-              .from('sales_issues')
-              .update(updates)
-              .eq('id', selectedIssue.id)
-
-          if (error) throw error
-
-          setIssues(prev => prev.map(item => item.id === selectedIssue.id ? { ...item, ...updates } : item))
-          setIsModalOpen(false)
+          setNewMessage('')
+          refreshComments(selectedIssue.id)
 
       } catch (err: any) {
-          alert('Gagal simpan: ' + err.message)
+          alert('Gagal kirim: ' + err.message)
       } finally {
-          setSaving(false)
+          setSending(false)
       }
+  }
+
+  // --- LOGIC KONFIRMASI 2 PIHAK (NEW) ---
+
+  // A. Admin Mengajukan Selesai
+  const handleAdminProposeResolve = async () => {
+      if(!selectedIssue) return
+      if(!confirm('Tandai pekerjaan selesai? Status akan menjadi "Waiting Confirmation" menunggu user.')) return
+      
+      await updateStatus(selectedIssue.id, 'Waiting Confirmation', { admin_name: currentUserName })
+      await sendSystemMessage('Admin menandai pekerjaan selesai. Menunggu konfirmasi user.')
+  }
+
+  // B. User Konfirmasi Selesai (Final Close)
+  const handleUserConfirmClose = async () => {
+      if(!selectedIssue) return
+      if(!confirm('Anda yakin masalah sudah tuntas? Tiket akan ditutup.')) return
+      
+      const now = new Date().toISOString()
+      await updateStatus(selectedIssue.id, 'Closed', { resolved_at: now })
+      await sendSystemMessage('User mengkonfirmasi masalah selesai. Tiket DITUTUP.')
+  }
+
+  // C. User Menolak (Revisi)
+  const handleUserReject = async () => {
+      if(!selectedIssue) return
+      const reason = prompt('Apa yang masih belum sesuai?')
+      if(!reason) return
+
+      // Reset resolved date jika ada, kembalikan ke In Progress
+      await updateStatus(selectedIssue.id, 'In Progress', { resolved_at: null }) 
+      await sendSystemMessage(`User menolak penyelesaian. Alasan: "${reason}". Status kembali ke In Progress.`)
   }
 
   // --- FILTERING ---
@@ -192,20 +309,15 @@ export default function SummaryPage() {
         const s = searchTerm.toLowerCase()
         const matchSearch = item.customer_name?.toLowerCase().includes(s) || 
                             item.profiles?.full_name?.toLowerCase().includes(s) ||
-                            item.unit_number?.toLowerCase().includes(s) // Tambahkan search by unit number
+                            item.unit_number?.toLowerCase().includes(s)
         const matchStatus = filterStatus === 'All' || item.status === filterStatus
         return matchSearch && matchStatus
     })
   }, [issues, searchTerm, filterStatus])
 
-  const stats = useMemo(() => ({
-    total: issues.length,
-    open: issues.filter(i => i.status === 'Open').length,
-    closed: issues.filter(i => i.status === 'Closed').length
-  }), [issues])
-
   const getStatusColor = (st: string) => {
     if (st === 'Closed') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    if (st === 'Waiting Confirmation') return 'bg-amber-100 text-amber-700 border-amber-200' // bg-slate-100 text-slate-700 border-slate-200
     if (st === 'In Progress') return 'bg-amber-100 text-amber-700 border-amber-200'
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
@@ -216,51 +328,50 @@ export default function SummaryPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header dengan Tombol Back */}
-        <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                {/* Tombol Back */}
                 <button 
                     onClick={() => router.push('/')} 
                     className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"
                 >
                     <ArrowLeft size={20} />
                 </button>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
-                    <LayoutList className="text-indigo-500"/> Summary Keluhan
-                </h1>
+                
+                {/* Wrapper untuk Judul & Deskripsi */}
+                <div>
+                    <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
+                        <LayoutList className="text-emerald-500" size={24}/> Summary Keluhan
+                    </h1>
+                    {/* Tambahan Deskripsi Disini */}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Data keluhan customer yang perlu ditindaklanjuti
+                    </p>
+                </div>
             </div>
-            
-            <button onClick={() => router.push('/sales-issues')} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm">
+
+            {/* Tombol Input Baru */}
+            <button 
+                onClick={() => router.push('/sales-issues')} 
+                className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm"
+            >
                 + Input Baru
             </button>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm">
-                <div className="text-slate-500 text-xs uppercase font-bold">Total Tiket</div>
-                <div className="text-2xl font-bold">{stats.total}</div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm">
-                <div className="text-slate-500 text-xs uppercase font-bold">Open</div>
-                <div className="text-2xl font-bold text-blue-600">{stats.open}</div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm">
-                <div className="text-slate-500 text-xs uppercase font-bold">Selesai</div>
-                <div className="text-2xl font-bold text-emerald-600">{stats.closed}</div>
-            </div>
-        </div>
-
-        {/* Toolbar */}
+        {/* Filters */}
         <div className="flex gap-4 mb-4">
             <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                 <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} 
-                    className="w-full pl-9 pr-4 py-2 bg-white rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm"/>
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm"/>
             </div>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-white px-4 py-2 rounded-lg border text-sm">
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm">
                 <option value="All">Semua Status</option>
                 <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Waiting Confirmation">Waiting Confirmation</option> {/* NEW OPTION */}
                 <option value="Closed">Closed</option>
             </select>
         </div>
@@ -272,112 +383,97 @@ export default function SummaryPage() {
                     <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 uppercase text-xs font-bold border-b">
                         <tr>
                             <th className="p-4">Tanggal Input</th>
-                            <th className="p-4">Customer & Sales</th>
-                            <th className="p-4 w-1/3">Detail Masalah</th>
-                            {isAdmin && <th className="p-4 bg-slate-100 dark:bg-slate-800/50">KPI Waktu</th>}
+                            <th className="p-4">Customer</th>
+                            <th className="p-4 w-2/5">Detail Masalah {isAdmin && '& KPI'}</th>
                             <th className="p-4">Status</th>
                             <th className="p-4 text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {filteredData.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                
-                                {/* 1. Tanggal */}
-                                <td className="p-4 align-top whitespace-nowrap">
+                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                <td className="p-4 align-top">
                                     <div className="font-bold">{new Date(item.created_at).toLocaleDateString('id-ID')}</div>
                                     <div className="text-xs text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
                                 </td>
-
-                                {/* 2. Customer & Sales */}
                                 <td className="p-4 align-top">
                                     <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
-                                    
-                                    {item.cust_group && (
-                                        <div className="mt-1 mb-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                                            <Users size={10} /> {item.cust_group}
+                                    <div className="text-xs text-slate-500 mt-1">Group: {item.cust_group || '-'}</div>
+                                    <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                            <User size={12} className="text-slate-400"/> {item.profiles?.full_name || 'Tanpa Nama'}
                                         </div>
-                                    )}
-
-                                    <div className="flex flex-col gap-0.5 border-l-2 border-slate-200 pl-2 mt-1">
-                                        <div className="flex items-center gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">
-                                            <User size={12}/> {item.profiles?.full_name || 'Tanpa Nama'}
+                                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                            <Mail size={12} className="text-slate-400"/> {item.profiles?.email || '-'}
                                         </div>
-                                        <div className="flex items-center gap-1 text-[11px] text-slate-500 break-all">
-                                            <Mail size={10}/> {item.profiles?.email || '-'}
-                                        </div>
-                                        <div className="text-[10px] text-slate-400">
-                                            {item.profiles?.phone_number || '-'}
+                                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                            <Phone size={12} className="text-slate-400"/> {item.profiles?.phone_number || '-'}
                                         </div>
                                     </div>
                                 </td>
-
-                                {/* 3. Masalah & Respon */}
-                                <td className="p-4 align-top space-y-3">
-                                    <div>
-                                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                                            Keluhan : {item.issue_type}
-                                        </div>
-                                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                                            Unit Number : {item.unit_number}
-                                        </div>
-                                        <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word text-sm">
-                                            {item.description}
-                                        </div>
-                                    </div>
-                                    
-                                    {item.admin_response && (
-                                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
-                                            <div className="text-[11px] font-bold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1.5">
-                                                <CheckCircle2 size={12}/> 
-                                                Respon oleh {item.admin_name || 'Admin'}:
-                                            </div>
-                                            <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-normal wrap-break-word italic">
-                                                "{item.admin_response}"
-                                            </div>
-                                        </div>
-                                    )}
-                                </td>
-
-                                {/* 4. KPI Waktu */}
-                                {isAdmin && (
-                                    <td className="p-4 align-top whitespace-nowrap bg-slate-50/50 dark:bg-slate-800/20">
-                                        <div className="space-y-3">
-                                            <div>
-                                                <div className="text-[10px] uppercase text-slate-400 font-bold">Durasi Respon</div>
-                                                <span className={`text-xs font-mono font-medium ${item.first_response_at ? 'text-amber-600' : 'text-slate-400 italic'}`}>
-                                                    {item.first_response_at ? calculateDuration(item.created_at, item.first_response_at) : 'Belum'}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <div className="text-[10px] uppercase text-slate-400 font-bold">Total Selesai</div>
-                                                <span className={`text-xs font-mono font-bold ${item.resolved_at ? 'text-emerald-600' : 'text-slate-400 italic'}`}>
-                                                    {item.resolved_at ? calculateDuration(item.created_at, item.resolved_at) : 'Berjalan...'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                )}
-
-                                {/* 5. Status */}
+                                
                                 <td className="p-4 align-top">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${getStatusColor(item.status)}`}>
+                                    <div className="text-[10px] font-bold uppercase text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-1">
+                                        {item.issue_type} | Unit: {item.unit_number}
+                                    </div>
+                                    <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word">
+                                        {item.description}
+                                    </div>
+                                    {renderAttachments(item.attachment_url)}
+
+                                    {/* KPI SECTION - HANYA ADMIN */}
+                                    {isAdmin && (
+                                        <div className="mt-3 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-[10px]">
+                                            {/* KPI RESPON */}
+                                            <div className="flex flex-col">
+                                                <span className="text-slate-400 flex items-center gap-1 mb-0.5">
+                                                    <Timer size={10}/> Respon Awal
+                                                </span>
+                                                {item.first_response_at ? (
+                                                    <span className="font-mono font-bold text-amber-500 dark:text-amber-400">
+                                                        {calculateDuration(item.created_at, item.first_response_at)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Belum di Respon</span>
+                                                )}
+                                            </div>
+
+                                            {/* KPI SELESAI */}
+                                            <div className="flex flex-col">
+                                                <span className="text-slate-400 flex items-center gap-1 mb-0.5">
+                                                    <CheckCircle2 size={10}/> Total Durasi
+                                                </span>
+                                                {item.resolved_at ? (
+                                                    <span className="font-mono font-bold text-emerald-500 dark:text-emerald-400">
+                                                        {calculateDuration(item.created_at, item.resolved_at)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Belum selesai</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </td>
+
+                                <td className="p-4 align-top">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${getStatusColor(item.status)}`}>
                                         {item.status}
                                     </span>
                                 </td>
 
-                                {/* 6. Aksi */}
                                 <td className="p-4 align-top text-center space-y-2">
                                     <button 
-                                        onClick={() => handleOpenEdit(item)} 
-                                        className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded text-xs font-bold transition-colors border border-indigo-200"
+                                        onClick={() => handleOpenChat(item)} 
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-bold transition-colors shadow-sm"
                                     >
-                                        <Edit3 size={14}/> Respon
+                                        <MessageSquare size={14}/> Chat / Respon
                                     </button>
                                     
-                                    <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1 block mx-auto" title="Hapus">
-                                        <Trash2 size={16}/>
-                                    </button>
+                                    {isAdmin && (
+                                      <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1" title="Hapus">
+                                          <Trash2 size={16}/>
+                                      </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -386,63 +482,125 @@ export default function SummaryPage() {
             </div>
         </div>
 
-        {/* MODAL EDIT */}
-        {isModalOpen && selectedIssue && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800">
-                    <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-                        <h3 className="font-bold text-lg">Respon Masalah</h3>
-                        <button onClick={() => setIsModalOpen(false)}><X size={20}/></button>
-                    </div>
-
-                    <div className="p-6 space-y-4">
-                        <div className="bg-slate-50 p-3 rounded text-sm text-slate-600 border mb-2">
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="font-bold">{selectedIssue.customer_name}</span>
-                                {selectedIssue.unit_number && (
-                                    <span className="text-xs bg-white border px-1.5 py-0.5 rounded font-mono">
-                                        {selectedIssue.unit_number}
-                                    </span>
-                                )}
+        {/* --- POPUP TIMELINE CHAT --- */}
+        {isChatOpen && selectedIssue && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
+                    
+                    <div className="p-4 border-b bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
+                        <div>
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                {selectedIssue.customer_name} 
+                                <span className={`text-[10px] px-2 py-0.5 rounded border uppercase ${getStatusColor(selectedIssue.status)}`}>{selectedIssue.status}</span>
+                            </h3>
+                            <div className="text-xs text-slate-500 flex items-center gap-2">
+                                <Hash size={12}/> {selectedIssue.unit_number} 
                             </div>
-                            {selectedIssue.description}
+                        </div>
+                        <button onClick={() => setIsChatOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition"><X size={20}/></button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100 dark:bg-slate-950/50">
+                        {/* Masalah Awal */}
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 shadow-sm mb-6">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Keluhan Awal</span>
+                                <span className="text-[10px] text-slate-400">{new Date(selectedIssue.created_at).toLocaleDateString('id-ID', {day: 'numeric', month:'short', year:'numeric'})}</span>
+                            </div>
+                            <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{selectedIssue.description}</p>
+                            {renderAttachments(selectedIssue.attachment_url)}
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-bold mb-1">Jawaban / Tindakan Anda</label>
-                            <textarea 
-                                rows={5}
-                                className="w-full p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                placeholder="Tulis solusi..."
-                                value={editForm.admin_response}
-                                onChange={e => setEditForm({...editForm, admin_response: e.target.value})}
-                            />
-                        </div>
+                        {/* Timeline Komentar */}
+                        {comments.length === 0 ? (
+                            <div className="text-center text-slate-400 text-xs py-4 italic">Belum ada percakapan. Mulai respon di bawah.</div>
+                        ) : (
+                            comments.map((c) => {
+                                const isSystem = c.sender_name === 'System'
+                                
+                                if(isSystem) return (
+                                    <div key={c.id} className="flex justify-center my-4">
+                                        <span className="text-[10px] text-slate-600 bg-white dark:bg-slate-900 border border-slate-200 shadow-sm mb-6 px-3 py-1 rounded-full font-bold">{c.message}</span>
+                                    </div>
+                                )
 
-                        <div>
-                            <label className="block text-sm font-bold mb-1">Status</label>
-                            <select 
-                                value={editForm.status}
-                                onChange={e => setEditForm({...editForm, status: e.target.value})}
-                                className="w-full p-2 rounded-lg border bg-white"
-                            >
-                                <option value="Open">Open</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Closed">Closed (Selesai)</option>
-                            </select>
+                                return (
+                                    <div key={c.id} className={`flex flex-col ${c.is_admin ? 'items-end' : 'items-start'}`}>
+                                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
+                                            c.is_admin 
+                                                ? 'bg-blue-600 text-white rounded-tr-none' 
+                                                : 'bg-white dark:bg-slate-800 border border-slate-200 text-slate-700 dark:text-slate-200 rounded-tl-none'
+                                        }`}>
+                                            <div className="font-bold text-[10px] mb-1 opacity-80 flex justify-between gap-4">
+                                                <span>{c.sender_name} {c.is_admin ? '(Key Account)' : ''}</span>
+                                            </div>
+                                            <p>{c.message}</p>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 mt-1 px-1">
+                                            {new Date(c.created_at).toLocaleString('id-ID', { 
+                                                day: '2-digit', month: 'short', year: 'numeric',
+                                                hour: '2-digit', minute: '2-digit' 
+                                            })}
+                                        </span>
+                                    </div>
+                                )
+                            })
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    <div className="p-3 bg-white dark:bg-slate-900 border-t shrink-0">
+                        {/* 1. Input Chat (Hanya jika belum Closed) */}
+                        {selectedIssue.status !== 'Closed' && (
+                            <form onSubmit={handleSendMessage} className="flex gap-2 mb-3">
+                                <input 
+                                    type="text" 
+                                    value={newMessage}
+                                    onChange={e => setNewMessage(e.target.value)}
+                                    placeholder="Tulis balasan..."
+                                    className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button 
+                                    type="submit" 
+                                    disabled={sending || !newMessage.trim()}
+                                    className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all"
+                                >
+                                    {sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}
+                                </button>
+                            </form>
+                        )}
+                        
+                        {/* 2. KONTROL STATUS (2-WAY CONFIRMATION) */}
+                        <div className="flex items-center justify-end border-t border-slate-100 dark:border-slate-800 pt-2">
+
+                            {/* A. ADMIN: Ajukan Selesai (Jika belum Waiting/Closed) */}
+                            {isAdmin && selectedIssue.status !== 'Closed' && selectedIssue.status !== 'Waiting Confirmation' && (
+                                <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
+                                    <CheckCircle size={14}/> Ajukan Selesai
+                                </button>
+                            )}
+
+                            {/* B. USER/ADMIN (View): Tombol Konfirmasi (Hanya User yg bisa klik, atau logic disesuaikan) */}
+                            {selectedIssue.status === 'Waiting Confirmation' && (
+                                <div className="flex gap-2">
+                                    <button onClick={handleUserReject} className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
+                                        <XCircle size={14}/> Belum / Revisi
+                                    </button>
+                                    <button onClick={handleUserConfirmClose} className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
+                                        <CheckCircle size={14}/> Konfirmasi Selesai
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* C. CLOSED */}
+                            {selectedIssue.status === 'Closed' && (
+                                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                                    <CheckCircle size={14}/> Tiket Ditutup
+                                </span>
+                            )}
                         </div>
                     </div>
 
-                    <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded text-sm">Batal</button>
-                        <button 
-                            onClick={handleSaveResponse} 
-                            disabled={saving}
-                            className="px-4 py-2 bg-blue-600 text-white font-bold rounded text-sm hover:bg-blue-700 flex items-center gap-2"
-                        >
-                            {saving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Simpan
-                        </button>
-                    </div>
                 </div>
             </div>
         )}

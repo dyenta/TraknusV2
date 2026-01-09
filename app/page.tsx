@@ -135,6 +135,7 @@ export default function MenuPage() {
         
         {/* HEADER SECTION - Data Real dari Tabel Profiles */}
         <div className="flex flex-col items-center space-y-4">
+          <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-15 h-15 rounded-xl mb-4 shadow-sm"/>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100 tracking-tight text-center">
             Portal Aplikasi
           </h1>
