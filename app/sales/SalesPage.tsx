@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2, MoreVertical, FileText, LayoutList, ChevronRight } from 'lucide-react'
+import { LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Moon, Laptop, Loader2, MoreVertical, FileText, LayoutList } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -17,7 +17,7 @@ export const DIMENSION_OPTIONS = [
     { label: 'PSS', value: 'pss' }, 
     { label: 'Key Account Type', value: 'key_account_type' }, 
     { label: 'Customer Group', value: 'cust_group' }, 
-    { label: 'Customer Name', value: 'cust_name' }, // <-- BARU: Hierarki
+    { label: 'Customer Name', value: 'cust_name' },
     { label: 'Product', value: 'product' }, 
     { label: 'Area', value: 'area' } 
 ]
@@ -64,38 +64,202 @@ const ControlBox = ({ label, value, onChange, options }: any) => {
     )
 }
 
+// --- UPDATED MULTISELECT (FIXED ADD TO SELECTION LOGIC) ---
 const MultiSelect = ({ label, options, optionsRaw, selected, onChange }: any) => {
-  const [isOpen, setIsOpen] = useState(false), [searchTerm, setSearchTerm] = useState(""), containerRef = useRef<HTMLDivElement>(null)
-  const finalOptions = useMemo(() => (optionsRaw || (options || []).map((o: any) => ({ label: !o || String(o).trim() === '' ? `No ${label}` : String(o), value: !o || String(o).trim() === '' ? "" : String(o) }))), [options, optionsRaw, label])
-  const filtered = finalOptions.filter((o:any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()))
+    const [isOpen, setIsOpen] = useState(false)
+    const [searchTerm, setSearchTerm] = useState("")
+    
+    // State Pilihan Sementara
+    const [tempSelected, setTempSelected] = useState<string[]>([])
+    // State Snapshot: Pilihan sebelum user mulai mengetik search (untuk fitur "Add")
+    const [baseSelection, setBaseSelection] = useState<string[]>([])
+    
+    // Opsi "Add current selection to filter"
+    const [addToSelection, setAddToSelection] = useState(false) 
+    
+    const containerRef = useRef<HTMLDivElement>(null)
+    
+    const finalOptions = useMemo(() => (optionsRaw || (options || []).map((o: any) => ({ 
+        label: !o || String(o).trim() === '' ? `No ${label}` : String(o), 
+        value: !o || String(o).trim() === '' ? "" : String(o) 
+    }))), [options, optionsRaw, label])
+    
+    const filtered = finalOptions.filter((o:any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()))
   
-  useEffect(() => { 
-      const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
-      if (isOpen) document.addEventListener('mousedown', handleDown); return () => document.removeEventListener('mousedown', handleDown)
-  }, [isOpen])
+    // --- INIT SAAT BUKA MENU ---
+    useEffect(() => {
+        if (isOpen) {
+            let initial: string[] = []
+            if (selected.includes('All')) {
+                initial = finalOptions.map((o:any) => o.value)
+            } else {
+                initial = selected
+            }
+            setTempSelected(initial)
+            setBaseSelection(initial) // Set base awal
+            setSearchTerm("") 
+            setAddToSelection(false) 
+        }
+    }, [isOpen, selected, finalOptions])
+
+    // --- LOGIC UTAMA: AUTO SELECT SAAT SEARCH BERUBAH ---
+    useEffect(() => {
+        if (isOpen && searchTerm) {
+             const visibleValues = filtered.map((o:any) => o.value);
+             
+             if (addToSelection) {
+                 // Mode Add: Gabungkan Snapshot Awal + Hasil Search Baru
+                 // Ini memperbaiki bug di mana pilihan lama hilang
+                 const newSet = new Set([...baseSelection, ...visibleValues]);
+                 setTempSelected(Array.from(newSet));
+             } else {
+                 // Mode Replace (Default): Hanya Hasil Search
+                 setTempSelected(visibleValues);
+             }
+        }
+    }, [searchTerm, addToSelection, finalOptions, isOpen, baseSelection]) // baseSelection ditambahkan dependencies
   
-  const toggle = (val: string) => { if (val === 'All') onChange(selected.includes('All') ? [] : ['All']); else { let newSel = selected.includes('All') ? finalOptions.map((o:any)=>o.value) : [...selected]; newSel = newSel.includes(val) ? newSel.filter((i:string)=>i!==val) : [...newSel, val]; onChange((newSel.length === finalOptions.length && finalOptions.length > 0) ? ['All'] : newSel) } }
-  const display = () => { if (selected.includes('All')) return 'All'; if (!selected.length) return 'None'; const names = selected.map((v:string) => finalOptions.find((o:any)=>o.value===v)?.label).filter(Boolean); return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length-2}` : names.join(', ') }
+    // Click outside handler
+    useEffect(() => { 
+        const handleDown = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false) }
+        if (isOpen) document.addEventListener('mousedown', handleDown); return () => document.removeEventListener('mousedown', handleDown)
+    }, [isOpen])
+
+    const handleApply = () => {
+        if (tempSelected.length === finalOptions.length && finalOptions.length > 0) {
+            onChange(['All']);
+        } else {
+            onChange(tempSelected);
+        }
+        setIsOpen(false);
+    }
   
-  return (
-    <div className="relative" ref={containerRef}>
-       <div className="flex flex-col"><label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label><button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}><span className="truncate font-medium text-slate-700 dark:text-slate-200 max-w-25 text-left">{display()}</span><ChevronDown size={14} className="text-slate-400 shrink-0" /></button></div>
-       {isOpen && (
-         <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 md:bg-transparent md:p-0 md:absolute md:inset-auto md:top-full md:left-0 md:block md:mt-1">
-            <div className="absolute inset-0 md:hidden" onClick={()=>setIsOpen(false)}></div>
-            <div className="relative w-full max-w-xs md:w-64 max-h-[70vh] md:max-h-80 flex flex-col bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-200">
-                <div className="shrink-0 p-2 border-b border-slate-100 dark:border-slate-800 flex gap-2">
-                    <div className="relative flex-1"><Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" /><input type="text" placeholder="Cari..." className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />{searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={12}/></button>}</div>
-                </div>
-                <div className="overflow-y-auto flex-1 p-1">
-                    {!searchTerm && <div onClick={()=>toggle('All')} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs font-bold border-b border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200"><div className={`w-3 h-3 rounded border flex items-center justify-center ${selected.includes('All')?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{selected.includes('All')&&<Check size={8} className="text-white"/>}</div>Select All</div>}
-                    {filtered.length ? filtered.map((o:any) => { const isSel = selected.includes(o.value) || selected.includes('All'); return (<div key={o.value||'empty'} onClick={()=>toggle(o.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs transition-colors"><div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSel?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>{isSel&&<Check size={8} className="text-white"/>}</div><span className={`${isSel?'font-semibold text-slate-800 dark:text-slate-100':'text-slate-600 dark:text-slate-400'} ${o.value===""?'italic text-red-500 dark:text-red-400':''}`}>{o.label}</span></div>) }) : <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Nihil</div>}
-                </div>
-            </div>
+    // Input Handler: Snapshot baseSelection saat mulai mengetik
+    const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        if (val && searchTerm === "") {
+            // Saat mulai mengetik dari kosong, simpan state terakhir sebagai base
+            setBaseSelection(tempSelected);
+        }
+        setSearchTerm(val);
+    }
+
+    const toggleTemp = (val: string) => {
+        let newSel = [...tempSelected];
+        if (newSel.includes(val)) {
+            newSel = newSel.filter(i => i !== val);
+        } else {
+            newSel.push(val);
+        }
+        setTempSelected(newSel);
+    }
+  
+    const handleSelectAllClick = () => {
+        if (!searchTerm) {
+            if (tempSelected.length === finalOptions.length) {
+                setTempSelected([]); 
+            } else {
+                setTempSelected(finalOptions.map((o:any) => o.value)); 
+            }
+            return;
+        }
+  
+        // Saat Search: Select All mengontrol hasil pencarian
+        const visibleValues = filtered.map((o:any) => o.value);
+        const isAllVisibleSelected = visibleValues.every((v: any) => tempSelected.includes(v));
+  
+        if (isAllVisibleSelected) {
+            // Uncheck Visible Only
+            const newSel = tempSelected.filter((v: string) => !visibleValues.includes(v));
+            setTempSelected(newSel);
+        } else {
+            // Select Visible
+            if (addToSelection) {
+                const newSel = Array.from(new Set([...tempSelected, ...visibleValues]));
+                setTempSelected(newSel);
+            } else {
+                // Di mode replace, kalau klik Select All, kita asumsikan user mau ganti ke semua hasil
+                setTempSelected([...visibleValues]);
+            }
+        }
+    }
+  
+    const isSelectAllChecked = useMemo(() => {
+        if (!searchTerm) return tempSelected.length === finalOptions.length && finalOptions.length > 0;
+        if (filtered.length === 0) return false;
+        return filtered.every((o:any) => tempSelected.includes(o.value));
+    }, [tempSelected, searchTerm, filtered, finalOptions]);
+  
+    const display = () => { if (selected.includes('All')) return 'All'; if (!selected.length) return 'None'; const names = selected.map((v:string) => finalOptions.find((o:any)=>o.value===v)?.label).filter(Boolean); return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length-2}` : names.join(', ') }
+    
+    return (
+      <div className="relative" ref={containerRef}>
+         <div className="flex flex-col">
+             <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">{label}</label>
+             <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                 <span className="truncate font-medium text-slate-700 dark:text-slate-200 max-w-25 text-left">{display()}</span>
+                 <ChevronDown size={14} className="text-slate-400 shrink-0" />
+             </button>
          </div>
-       )}
-    </div>
-  )
+         
+         {isOpen && (
+           <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 md:bg-transparent md:p-0 md:absolute md:inset-auto md:top-full md:left-0 md:block md:mt-1">
+              <div className="absolute inset-0 md:hidden" onClick={()=>setIsOpen(false)}></div>
+              <div className="relative w-full max-w-xs md:w-64 max-h-[70vh] md:max-h-96 flex flex-col bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="shrink-0 p-2 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+                      <div className="relative flex-1">
+                          <Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" />
+                          <input 
+                            type="text" 
+                            placeholder="Cari... (Enter utk Terapkan)" 
+                            className="w-full pl-7 pr-6 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500" 
+                            value={searchTerm} 
+                            onChange={handleSearchInput} 
+                            onKeyDown={(e) => { if(e.key === 'Enter') handleApply() }}
+                            autoFocus 
+                          />
+                          {searchTerm && <button onClick={()=>setSearchTerm("")} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={12}/></button>}
+                      </div>
+                      {searchTerm && (
+                          <div onClick={() => setAddToSelection(!addToSelection)} className="flex items-center gap-2 px-1 cursor-pointer select-none">
+                               <div className={`w-3 h-3 rounded border flex items-center justify-center transition-colors ${addToSelection ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
+                                  {addToSelection && <Check size={8} className="text-white"/>}
+                               </div>
+                               <span className="text-[10px] text-slate-500 dark:text-slate-400">Tambahkan ke pilihan saat ini</span>
+                          </div>
+                      )}
+                  </div>
+                  <div className="overflow-y-auto flex-1 p-1">
+                      <div onClick={handleSelectAllClick} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs font-bold border-b border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 select-none">
+                          <div className={`w-3 h-3 rounded border flex items-center justify-center ${isSelectAllChecked ?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>
+                              {isSelectAllChecked && <Check size={8} className="text-white"/>}
+                          </div>
+                          {searchTerm ? '(Pilih Hasil Pencarian)' : '(Pilih Semua)'}
+                      </div>
+                      {filtered.length ? filtered.map((o:any) => { 
+                          const isSel = tempSelected.includes(o.value); 
+                          return (
+                              <div key={o.value||'empty'} onClick={()=>toggleTemp(o.value)} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-xs transition-colors select-none">
+                                  <div className={`w-3 h-3 rounded border flex items-center justify-center shrink-0 ${isSel?'bg-blue-600 border-blue-600':'border-slate-300 dark:border-slate-600'}`}>
+                                      {isSel&&<Check size={8} className="text-white"/>}
+                                  </div>
+                                  <span className={`${isSel?'font-semibold text-slate-800 dark:text-slate-100':'text-slate-600 dark:text-slate-400'} ${o.value===""?'italic text-red-500 dark:text-red-400':''}`}>{o.label}</span>
+                              </div>
+                          ) 
+                      }) : <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Nihil</div>}
+                  </div>
+                  <div className="shrink-0 p-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+                      <span className="text-[10px] text-slate-400">{tempSelected.length} terpilih</span>
+                      <div className="flex gap-2">
+                           <button onClick={()=>setIsOpen(false)} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Batal</button>
+                           <button onClick={handleApply} className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-medium shadow-sm transition-colors">Terapkan</button>
+                      </div>
+                  </div>
+              </div>
+           </div>
+         )}
+      </div>
+    )
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -151,9 +315,9 @@ export default function SalesPage() {
   const [selKAT, setSelKAT] = useState(['All'])
   const [selCG, setSelCG] = useState(['All'])
   const [selProd, setSelProd] = useState(['All'])
-  const [selCustNames, setSelCustNames] = useState(['All']) // <-- BARU
+  const [selCustNames, setSelCustNames] = useState(['All'])
 
-  const [opts, setOpts] = useState({ year:[], months:[], areas:[], ba:[], pss:[], kat:[], products:[], cg:[], custNames: [] }) // <-- BARU: custNames
+  const [opts, setOpts] = useState({ year:[], months:[], areas:[], ba:[], pss:[], kat:[], products:[], cg:[], custNames: [] })
   
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -196,19 +360,19 @@ export default function SalesPage() {
         filter_key_account_types: selKAT, 
         filter_cust_groups: selCG, 
         filter_products: selProd,
-        filter_cust_names: selCustNames // <-- BARU: Kirim filter customer name
+        filter_cust_names: selCustNames 
     }
 
     try {
       const [optRes, custRes, dataRes, chartRes] = await Promise.all([ 
           supabase.rpc('get_dynamic_filter_options', rpcArgs), 
-          supabase.rpc('get_distinct_customers'), // <-- BARU: Fetch list customer terpisah
+          supabase.rpc('get_distinct_customers'), 
           supabase.rpc('get_sales_analytics', analyticsArgs), 
           supabase.rpc('get_sales_analytics', { ...analyticsArgs, lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'' }) 
       ])
       
       if (optRes.data) setOpts(prev => ({ ...prev, year: optRes.data.year, months: optRes.data.month, areas: optRes.data.area, ba: optRes.data.business_area, pss: optRes.data.pss, kat: optRes.data.key_account_type, products: optRes.data.product, cg: optRes.data.cust_group, custNames: optRes.data.cust_name }))      
-      if (custRes.data) setOpts(prev => ({ ...prev, custNames: custRes.data.map((c:any) => c.cust_name) })) // <-- BARU: Set list customer
+      if (custRes.data) setOpts(prev => ({ ...prev, custNames: custRes.data.map((c:any) => c.cust_name) }))
       if (dataRes.data) setData(dataRes.data); 
       if (chartRes.data) setChartData(chartRes.data)
     } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -297,7 +461,6 @@ return (
                  <MultiSelect label="Product" options={opts.products} selected={selProd} onChange={setSelProd} />
                  <MultiSelect label="PSS" options={opts.pss} selected={selPSS} onChange={setSelPSS} />
                  <MultiSelect label="Cust Group" options={opts.cg} selected={selCG} onChange={setSelCG} />
-                 {/* FILTER BARU: CUSTOMER NAME */}
                  <MultiSelect label="Customer Name" options={opts.custNames} selected={selCustNames} onChange={setSelCustNames} />
              </div>
           </div>
