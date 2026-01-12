@@ -7,10 +7,8 @@ import {
   ArrowLeft, Search, Trash2, LayoutList, Loader2, User, 
   X, Send, Mail, Phone, Users, Hash, Paperclip, ExternalLink, 
   MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle,
-  // Icon tambahan untuk Tema
   Sun, Moon, Laptop, ChevronDown
 } from 'lucide-react'
-// Pastikan path ini sesuai dengan struktur folder Anda (misal: ../components/ThemeProvider)
 import { useTheme } from '../components/ThemeProvider' 
 
 // --- INTERFACE ---
@@ -40,6 +38,7 @@ interface Issue {
 
 interface Comment {
   id: number
+  issue_id: number // Penting untuk filter realtime
   sender_name: string
   message: string
   created_at: string
@@ -48,7 +47,6 @@ interface Comment {
 
 export default function SummaryPage() {
   const router = useRouter()
-  // Hook Tema
   const { theme, setTheme } = useTheme()
   
   const supabase = createBrowserClient(
@@ -71,6 +69,14 @@ export default function SummaryPage() {
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // REF UNTUK REALTIME (Supaya listener selalu baca state terbaru)
+  const selectedIssueRef = useRef<Issue | null>(null)
+
+  // Update ref setiap kali selectedIssue berubah
+  useEffect(() => {
+    selectedIssueRef.current = selectedIssue
+  }, [selectedIssue])
+
   // State Dropdown Tema
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
@@ -88,12 +94,10 @@ export default function SummaryPage() {
     }
   }
 
-  // --- HELPER SCROLL ---
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  // --- HELPER UNTUK NAMA FILE DARI URL ---
   const getFileNameFromUrl = (url: string) => {
     try {
         const decoded = decodeURIComponent(url)
@@ -103,12 +107,10 @@ export default function SummaryPage() {
     }
   }
 
-  // --- HELPER RENDER ATTACHMENTS ---
   const renderAttachments = (attachmentUrl: string | null) => {
     if (!attachmentUrl) return null
 
     let urls: string[] = []
-    
     try {
         const parsed = JSON.parse(attachmentUrl)
         if (Array.isArray(parsed)) {
@@ -139,19 +141,15 @@ export default function SummaryPage() {
     )
   }
 
-  // --- HELPER KPI DURATION ---
   const calculateDuration = (startStr: string, endStr: string | null) => {
     if (!endStr) return '-'
     const start = new Date(startStr).getTime()
     const end = new Date(endStr).getTime()
     const diffMs = end - start
-    
     if (diffMs < 0) return '0m'
-
     const minutes = Math.floor(diffMs / 60000)
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
-
     if (days > 0) return `${days}h ${hours % 24}j`
     if (hours > 0) return `${hours}j ${minutes % 60}m`
     return `${minutes} mnt`
@@ -159,7 +157,7 @@ export default function SummaryPage() {
 
   // --- FETCH ISSUES ---
   const fetchIssues = useCallback(async () => {
-      setLoading(prev => prev || issues.length === 0)
+      // Jangan set loading true di sini agar tidak kedip saat update background
       try {
         const { data, error } = await supabase
             .from('sales_issues')
@@ -168,12 +166,12 @@ export default function SummaryPage() {
         
         if (error) throw error
         setIssues(data || [])
+        setLoading(false) // Matikan loading awal
       } catch (err: any) { 
           console.error('Error:', err.message) 
-      } finally { 
-          setLoading(false) 
-      }
-  }, [supabase, issues.length])
+          setLoading(false)
+      } 
+  }, [supabase])
 
   // --- AUTH CHECK ---
   useEffect(() => {
@@ -202,9 +200,66 @@ export default function SummaryPage() {
     init()
   }, []) 
 
+  // --- REALTIME LISTENER (THE FIX) ---
+  useEffect(() => {
+    if (authChecking) return
+
+    console.log("Menyalakan Realtime Listener...")
+
+    const channel = supabase
+      .channel('app-changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sales_issues' },
+        (payload) => {
+          console.log('🔔 STATUS UPDATE:', payload.new)
+          const updated = payload.new as Issue
+          
+          // 1. Update List Utama
+          setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: i.profiles } : i))
+          
+          // 2. Update Modal jika sedang terbuka
+          // Gunakan Ref untuk mengecek apakah issue yang diupdate adalah yang sedang dibuka
+          if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
+             setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'issue_comments' },
+        (payload) => {
+          console.log('💬 CHAT BARU MASUK:', payload.new)
+          const newComment = payload.new as Comment
+          
+          // Cek apakah chat ini milik issue yang sedang dibuka?
+          // Kita pakai REF (selectedIssueRef) karena state biasa mungkin "stale" di dalam callback ini
+          const currentOpenIssue = selectedIssueRef.current
+          
+          if (currentOpenIssue && currentOpenIssue.id === newComment.issue_id) {
+             setComments(prev => {
+                // Cegah duplikat (jika optimistik update kita lebih cepat dari realtime)
+                if (prev.some(c => c.id === newComment.id)) return prev
+                
+                setTimeout(scrollToBottom, 100)
+                return [...prev, newComment]
+             })
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') console.log('✅ KONEKSI REALTIME BERHASIL')
+        if (status === 'CHANNEL_ERROR') console.error('❌ KONEKSI REALTIME GAGAL (Cek Network/Firewall)')
+        if (status === 'TIMED_OUT') console.warn('⚠️ KONEKSI TIMEOUT')
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, authChecking]) // Dependency minimal agar tidak reset terus
+
   // --- ACTIONS ---
 
-  // 1. Refresh Komentar
   const refreshComments = async (id: number) => {
     const { data } = await supabase
       .from('issue_comments')
@@ -216,14 +271,13 @@ export default function SummaryPage() {
     setTimeout(scrollToBottom, 100)
   }
 
-  // 2. Helper Update Status & Send System Message
   const updateStatus = async (id: number, status: string, extraFields: any = {}) => {
       const { error } = await supabase.from('sales_issues').update({ status, ...extraFields }).eq('id', id)
       if (error) {
           alert('Gagal update status: ' + error.message)
           return
       }
-      // Update local state
+      // Update local state (optimistic)
       setIssues(prev => prev.map(i => i.id === id ? { ...i, status, ...extraFields } : i))
       setSelectedIssue(prev => prev ? { ...prev, status, ...extraFields } : null)
   }
@@ -236,10 +290,10 @@ export default function SummaryPage() {
           sender_name: 'System',
           is_admin: true
       })
-      refreshComments(selectedIssue.id)
+      // Tidak perlu refreshComments manual karena realtime akan menangkapnya,
+      // tapi untuk keamanan boleh dipanggil (Realtime logic sudah handle duplikat)
   }
 
-  // 3. Delete Issue
   const handleDelete = async (id: number) => {
     if(!confirm('Hapus tiket ini beserta riwayat chatnya?')) return
     try {
@@ -249,15 +303,13 @@ export default function SummaryPage() {
     } catch (err: any) { alert('Gagal hapus: ' + err.message) }
   }
 
-  // 4. Open Chat
   const handleOpenChat = async (issue: Issue) => {
-      setSelectedIssue(issue)
+      setSelectedIssue(issue) // Ini akan trigger useEffect ref update
       setIsChatOpen(true)
       setComments([]) 
       refreshComments(issue.id)
   }
 
-  // 5. Send Message (Auto Status In Progress if Admin)
   const handleSendMessage = async (e?: React.FormEvent) => {
       e?.preventDefault()
       if (!newMessage.trim() || !selectedIssue) return
@@ -265,14 +317,16 @@ export default function SummaryPage() {
 
       setSending(true)
       try {
-          await supabase.from('issue_comments').insert({
+          const { error } = await supabase.from('issue_comments').insert({
               issue_id: selectedIssue.id,
               message: newMessage,
               sender_name: currentUserName,
               is_admin: isAdmin
           })
+          
+          if(error) throw error
 
-          // Logic: Jika Admin balas tiket OPEN -> In Progress & Catat Waktu Respon
+          // Logic: Jika Admin balas tiket OPEN -> In Progress
           if (isAdmin && selectedIssue.status === 'Open') {
               const now = new Date().toISOString()
               const extraFields = !selectedIssue.first_response_at 
@@ -283,7 +337,9 @@ export default function SummaryPage() {
           }
 
           setNewMessage('')
-          refreshComments(selectedIssue.id)
+          // Kita tidak perlu manual refreshComments() karena Realtime akan menangkap INSERT kita sendiri juga.
+          // Tapi jika realtime delay, Anda bisa uncomment bawah ini untuk instant feedback:
+          // refreshComments(selectedIssue.id)
 
       } catch (err: any) {
           alert('Gagal kirim: ' + err.message)
@@ -292,18 +348,16 @@ export default function SummaryPage() {
       }
   }
 
-  // --- LOGIC KONFIRMASI 2 PIHAK (NEW) ---
+  // --- LOGIC KONFIRMASI ---
 
-  // A. Admin Mengajukan Selesai
   const handleAdminProposeResolve = async () => {
       if(!selectedIssue) return
-      if(!confirm('Tandai pekerjaan selesai? Status akan menjadi "Waiting Confirmation" menunggu user.')) return
+      if(!confirm('Tandai pekerjaan selesai? Status akan menjadi "Waiting Confirmation".')) return
       
       await updateStatus(selectedIssue.id, 'Waiting Confirmation', { admin_name: currentUserName })
       await sendSystemMessage('Admin menandai pekerjaan selesai. Menunggu konfirmasi user.')
   }
 
-  // B. User Konfirmasi Selesai (Final Close)
   const handleUserConfirmClose = async () => {
       if(!selectedIssue) return
       if(!confirm('Anda yakin masalah sudah tuntas? Tiket akan ditutup.')) return
@@ -313,13 +367,11 @@ export default function SummaryPage() {
       await sendSystemMessage('User mengkonfirmasi masalah selesai. Tiket DITUTUP.')
   }
 
-  // C. User Menolak (Revisi)
   const handleUserReject = async () => {
       if(!selectedIssue) return
       const reason = prompt('Apa yang masih belum sesuai?')
       if(!reason) return
 
-      // Reset resolved date jika ada, kembalikan ke In Progress
       await updateStatus(selectedIssue.id, 'In Progress', { resolved_at: null }) 
       await sendSystemMessage(`User menolak penyelesaian. Alasan: "${reason}". Status kembali ke In Progress.`)
   }
@@ -352,65 +404,33 @@ export default function SummaryPage() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
-                {/* Tombol Back */}
-                <button 
-                    onClick={() => router.push('/')} 
-                    className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"
-                >
+                <button onClick={() => router.push('/')} className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm">
                     <ArrowLeft size={20} />
                 </button>
-                
-                {/* Wrapper untuk Judul & Deskripsi */}
                 <div>
                     <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                         <img src="/favicon.ico" alt="Logo" className="w-8 h-8 rounded"/>  Summary Keluhan
                     </h1>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Data keluhan customer yang perlu ditindaklanjuti
-                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Data keluhan customer yang perlu ditindaklanjuti</p>
                 </div>
             </div>
 
-            {/* ACTION GROUP: INPUT BARU + THEME DROPDOWN */}
             <div className="flex items-center gap-3">
-                
-                {/* 1. INPUT BARU */}
-                <button 
-                    onClick={() => router.push('/sales-issues')} 
-                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm whitespace-nowrap"
-                >
+                <button onClick={() => router.push('/sales-issues')} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm whitespace-nowrap">
                     + Input Baru
                 </button>
-
-                {/* 2. THEME DROPDOWN */}
                 <div className="relative">
-                    <button 
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} 
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm"
-                    >
-                      {getThemeIcon(theme)}
-                      <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
+                    <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm">
+                      {getThemeIcon(theme)} <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
                     </button>
-
-                    {/* Dropdown Menu */}
                     <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
                       {['light', 'dark', 'system'].map((m: any) => (
-                        <button
-                          key={m}
-                          onClick={() => {
-                            setTheme(m)
-                            setIsDropdownOpen(false)
-                          }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                        >
-                          {getThemeIcon(m)}
-                          <span className="capitalize">{m === 'system' ? 'Sistem' : m === 'light' ? 'Terang' : 'Gelap'}</span>
+                        <button key={m} onClick={() => { setTheme(m); setIsDropdownOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                          {getThemeIcon(m)} <span className="capitalize">{m === 'system' ? 'Sistem' : m === 'light' ? 'Terang' : 'Gelap'}</span>
                         </button>
                       ))}
                     </div>
                 </div>
-
             </div>
         </div>
 
@@ -418,8 +438,7 @@ export default function SummaryPage() {
         <div className="flex gap-4 mb-4">
             <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
-                <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} 
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm dark:text-white dark:border-slate-700"/>
+                <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm dark:text-white dark:border-slate-700"/>
             </div>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700">
                 <option value="All">Semua Status</option>
@@ -430,7 +449,7 @@ export default function SummaryPage() {
             </select>
         </div>
 
-        {/* Tabel Utama */}
+        {/* Tabel */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
@@ -454,80 +473,28 @@ export default function SummaryPage() {
                                     <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
                                     <div className="text-xs text-slate-500 mt-1">Group: {item.cust_group || '-'}</div>
                                     <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                                            <User size={12} className="text-slate-400"/> {item.profiles?.full_name || 'Tanpa Nama'}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                            <Mail size={12} className="text-slate-400"/> {item.profiles?.email || '-'}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                            <Phone size={12} className="text-slate-400"/> {item.profiles?.phone_number || '-'}
-                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium"><User size={12} className="text-slate-400"/> {item.profiles?.full_name || 'Tanpa Nama'}</div>
+                                        <div className="flex items-center gap-2 text-[11px] text-slate-500"><Mail size={12} className="text-slate-400"/> {item.profiles?.email || '-'}</div>
+                                        <div className="flex items-center gap-2 text-[11px] text-slate-500"><Phone size={12} className="text-slate-400"/> {item.profiles?.phone_number || '-'}</div>
                                     </div>
                                 </td>
-                                
                                 <td className="p-4 align-top">
-                                    <div className="text-[10px] font-bold uppercase text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-1">
-                                        {item.issue_type} | Unit: {item.unit_number}
-                                    </div>
-                                    <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word">
-                                        {item.description}
-                                    </div>
+                                    <div className="text-[10px] font-bold uppercase text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-1">{item.issue_type} | Unit: {item.unit_number}</div>
+                                    <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word">{item.description}</div>
                                     {renderAttachments(item.attachment_url)}
-
-                                    {/* KPI SECTION - HANYA ADMIN */}
                                     {isAdmin && (
                                         <div className="mt-3 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-[10px]">
-                                            {/* KPI RESPON */}
-                                            <div className="flex flex-col">
-                                                <span className="text-slate-400 flex items-center gap-1 mb-0.5">
-                                                    <Timer size={10}/> Respon Awal
-                                                </span>
-                                                {item.first_response_at ? (
-                                                    <span className="font-mono font-bold text-amber-500 dark:text-amber-400">
-                                                        {calculateDuration(item.created_at, item.first_response_at)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400 italic">Belum di Respon</span>
-                                                )}
-                                            </div>
-
-                                            {/* KPI SELESAI */}
-                                            <div className="flex flex-col">
-                                                <span className="text-slate-400 flex items-center gap-1 mb-0.5">
-                                                    <CheckCircle2 size={10}/> Total Durasi
-                                                </span>
-                                                {item.resolved_at ? (
-                                                    <span className="font-mono font-bold text-emerald-500 dark:text-emerald-400">
-                                                        {calculateDuration(item.created_at, item.resolved_at)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400 italic">Belum selesai</span>
-                                                )}
-                                            </div>
+                                            <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><Timer size={10}/> Respon Awal</span>{item.first_response_at ? <span className="font-mono font-bold text-amber-500 dark:text-amber-400">{calculateDuration(item.created_at, item.first_response_at)}</span> : <span className="text-slate-400 italic">Belum di Respon</span>}</div>
+                                            <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><CheckCircle2 size={10}/> Total Durasi</span>{item.resolved_at ? <span className="font-mono font-bold text-emerald-500 dark:text-emerald-400">{calculateDuration(item.created_at, item.resolved_at)}</span> : <span className="text-slate-400 italic">Belum selesai</span>}</div>
                                         </div>
                                     )}
                                 </td>
-
                                 <td className="p-4 align-top">
-                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${getStatusColor(item.status)}`}>
-                                        {item.status}
-                                    </span>
+                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${getStatusColor(item.status)}`}>{item.status}</span>
                                 </td>
-
                                 <td className="p-4 align-top text-center space-y-2">
-                                    <button 
-                                        onClick={() => handleOpenChat(item)} 
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-bold transition-colors shadow-sm"
-                                    >
-                                        <MessageSquare size={14}/> Chat / Respon
-                                    </button>
-                                    
-                                    {isAdmin && (
-                                      <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1" title="Hapus">
-                                          <Trash2 size={16}/>
-                                      </button>
-                                    )}
+                                    <button onClick={() => handleOpenChat(item)} className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-bold transition-colors shadow-sm"><MessageSquare size={14}/> Chat / Respon</button>
+                                    {isAdmin && (<button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1" title="Hapus"><Trash2 size={16}/></button>)}
                                 </td>
                             </tr>
                         ))}
@@ -536,26 +503,22 @@ export default function SummaryPage() {
             </div>
         </div>
 
-        {/* --- POPUP TIMELINE CHAT --- */}
+        {/* Modal Chat */}
         {isChatOpen && selectedIssue && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
-                    
-                    <div className="p-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex justify-between items- shrink-0">
+                    <div className="p-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
                         <div>
                             <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                                 {selectedIssue.customer_name} 
                                 <span className={`text-[10px] px-2 py-0.5 rounded border uppercase ${getStatusColor(selectedIssue.status)}`}>{selectedIssue.status}</span>
                             </h3>
-                            <div className="text-xs text-slate-500 flex items-center gap-2">
-                                <Hash size={12}/> {selectedIssue.unit_number} 
-                            </div>
+                            <div className="text-xs text-slate-500 flex items-center gap-2"><Hash size={12}/> {selectedIssue.unit_number} </div>
                         </div>
                         <button onClick={() => setIsChatOpen(false)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition text-slate-500 dark:text-slate-400"><X size={20}/></button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100 dark:bg-slate-950/50">
-                        {/* Masalah Awal */}
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-6">
                             <div className="flex justify-between items-start mb-2">
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Keluhan Awal</span>
@@ -565,37 +528,19 @@ export default function SummaryPage() {
                             {renderAttachments(selectedIssue.attachment_url)}
                         </div>
 
-                        {/* Timeline Komentar */}
                         {comments.length === 0 ? (
                             <div className="text-center text-slate-400 text-xs py-4 italic">Belum ada percakapan. Mulai respon di bawah.</div>
                         ) : (
                             comments.map((c) => {
                                 const isSystem = c.sender_name === 'System'
-                                
-                                if(isSystem) return (
-                                    <div key={c.id} className="flex justify-center my-4">
-                                        <span className="text-[10px] text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 px-3 py-1 rounded-full font-bold">{c.message}</span>
-                                    </div>
-                                )
-
+                                if(isSystem) return (<div key={c.id} className="flex justify-center my-4"><span className="text-[10px] text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 px-3 py-1 rounded-full font-bold">{c.message}</span></div>)
                                 return (
                                     <div key={c.id} className={`flex flex-col ${c.is_admin ? 'items-end' : 'items-start'}`}>
-                                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
-                                            c.is_admin 
-                                                ? 'bg-blue-600 text-white rounded-tr-none' 
-                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-none'
-                                        }`}>
-                                            <div className="font-bold text-[10px] mb-1 opacity-80 flex justify-between gap-4">
-                                                <span>{c.sender_name} {c.is_admin ? '(Key Account)' : ''}</span>
-                                            </div>
+                                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${c.is_admin ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-none'}`}>
+                                            <div className="font-bold text-[10px] mb-1 opacity-80 flex justify-between gap-4"><span>{c.sender_name} {c.is_admin ? '(Key Account)' : ''}</span></div>
                                             <p>{c.message}</p>
                                         </div>
-                                        <span className="text-[10px] text-slate-400 mt-1 px-1">
-                                            {new Date(c.created_at).toLocaleString('id-ID', { 
-                                                day: '2-digit', month: 'short', year: 'numeric',
-                                                hour: '2-digit', minute: '2-digit' 
-                                            })}
-                                        </span>
+                                        <span className="text-[10px] text-slate-400 mt-1 px-1">{new Date(c.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                     </div>
                                 )
                             })
@@ -604,77 +549,34 @@ export default function SummaryPage() {
                     </div>
 
                     <div className="p-3 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shrink-0">
-                        {/* 1. Input Chat (Hanya jika belum Closed) */}
                         {selectedIssue.status !== 'Closed' && (
                             <form onSubmit={handleSendMessage} className="flex gap-2 mb-3">
-                                <input 
-                                    type="text" 
-                                    value={newMessage}
-                                    onChange={e => setNewMessage(e.target.value)}
-                                    placeholder="Tulis balasan..."
-                                    className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
-                                />
-                                <button 
-                                    type="submit" 
-                                    disabled={sending || !newMessage.trim()}
-                                    className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all"
-                                >
-                                    {sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}
-                                </button>
+                                <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Tulis balasan..." className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"/>
+                                <button type="submit" disabled={sending || !newMessage.trim()} className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all">{sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}</button>
                             </form>
                         )}
-                        
-                        {/* 2. KONTROL STATUS (2-WAY CONFIRMATION) */}
                         <div className="flex items-center justify-end border-t border-slate-100 dark:border-slate-800 pt-2">
-
-                            {/* A. ADMIN: Ajukan Selesai (Jika belum Waiting/Closed) */}
                             {isAdmin && selectedIssue.status !== 'Closed' && selectedIssue.status !== 'Waiting Confirmation' && (
-                                <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
-                                    <CheckCircle size={14}/> Ajukan Selesai
-                                </button>
+                                <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><CheckCircle size={14}/> Ajukan Selesai</button>
                             )}
-
-                            {/* B. USER/ADMIN (View): Tombol Konfirmasi */}
                             {selectedIssue.status === 'Waiting Confirmation' && (
                                 <>
-                                    {/* Cek apakah user yang login adalah pemilik tiket */}
                                     {currentUserEmail === selectedIssue.profiles?.email ? (
                                         <div className="flex gap-2">
-                                            <button 
-                                                onClick={handleUserReject} 
-                                                className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
-                                            >
-                                                <XCircle size={14}/> Belum / Revisi
-                                            </button>
-                                            <button 
-                                                onClick={handleUserConfirmClose} 
-                                                className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
-                                            >
-                                                <CheckCircle size={14}/> Konfirmasi Selesai
-                                            </button>
+                                            <button onClick={handleUserReject} className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><XCircle size={14}/> Belum / Revisi</button>
+                                            <button onClick={handleUserConfirmClose} className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><CheckCircle size={14}/> Konfirmasi Selesai</button>
                                         </div>
                                     ) : (
-                                        /* Tampilan untuk Admin / Orang lain saat menunggu user */
-                                        <span className="text-xs text-slate-500 italic flex items-center gap-1">
-                                            <Clock size={14}/> Menunggu konfirmasi dari {selectedIssue.profiles?.full_name || 'User'}...
-                                        </span>
+                                        <span className="text-xs text-slate-500 italic flex items-center gap-1"><Clock size={14}/> Menunggu konfirmasi dari {selectedIssue.profiles?.full_name || 'User'}...</span>
                                     )}
                                 </>
                             )}
-
-                            {/* C. CLOSED */}
-                            {selectedIssue.status === 'Closed' && (
-                                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                                    <CheckCircle size={14}/> Tiket Ditutup
-                                </span>
-                            )}
+                            {selectedIssue.status === 'Closed' && (<span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={14}/> Tiket Ditutup</span>)}
                         </div>
                     </div>
-
                 </div>
             </div>
         )}
-
       </div>
     </main>
   )
