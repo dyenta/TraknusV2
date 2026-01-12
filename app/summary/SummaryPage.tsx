@@ -38,7 +38,7 @@ interface Issue {
 
 interface Comment {
   id: number
-  issue_id: number // Penting untuk filter realtime
+  issue_id: number
   sender_name: string
   message: string
   created_at: string
@@ -54,8 +54,11 @@ export default function SummaryPage() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
   )
 
+  // State Data
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // State Auth
   const [authChecking, setAuthChecking] = useState(true)
   const [currentUserEmail, setCurrentUserEmail] = useState('')
   const [currentUserName, setCurrentUserName] = useState('')
@@ -69,7 +72,7 @@ export default function SummaryPage() {
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // REF UNTUK REALTIME (Supaya listener selalu baca state terbaru)
+  // REF UNTUK REALTIME (Supaya listener selalu baca state terbaru tanpa stale closure)
   const selectedIssueRef = useRef<Issue | null>(null)
 
   // Update ref setiap kali selectedIssue berubah
@@ -77,14 +80,12 @@ export default function SummaryPage() {
     selectedIssueRef.current = selectedIssue
   }, [selectedIssue])
 
-  // State Dropdown Tema
+  // State UI Lainnya
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-
-  // Filter
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
 
-  // --- HELPER UNTUK ICON TEMA ---
+  // --- HELPER FUNCTIONS ---
   const getThemeIcon = (t: string) => {
     switch (t) {
       case 'light': return <Sun size={14} />
@@ -155,9 +156,8 @@ export default function SummaryPage() {
     return `${minutes} mnt`
   }
 
-  // --- FETCH ISSUES ---
+  // --- INITIAL DATA FETCH ---
   const fetchIssues = useCallback(async () => {
-      // Jangan set loading true di sini agar tidak kedip saat update background
       try {
         const { data, error } = await supabase
             .from('sales_issues')
@@ -166,7 +166,7 @@ export default function SummaryPage() {
         
         if (error) throw error
         setIssues(data || [])
-        setLoading(false) // Matikan loading awal
+        setLoading(false)
       } catch (err: any) { 
           console.error('Error:', err.message) 
           setLoading(false)
@@ -200,44 +200,41 @@ export default function SummaryPage() {
     init()
   }, []) 
 
-  // --- REALTIME LISTENER (THE FIX) ---
+  // ==========================================
+  //      REALTIME LISTENER (FULL FITUR)
+  // ==========================================
   useEffect(() => {
     if (authChecking) return
 
-    console.log("Menyalakan Realtime Listener...")
-
+    // Setup Channel
     const channel = supabase
-      .channel('app-changes')
-      
-      // 1. LISTEN: UPDATE STATUS (Tiket Berubah)
+      .channel('app-global-changes')
+
+      // 1. UPDATE (Status Berubah)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sales_issues' },
         (payload) => {
-          console.log('🔔 STATUS UPDATE:', payload.new)
           const updated = payload.new as Issue
           
-          // A. Update List Utama
-          // Kita pertahankan profile lama karena update status tidak mengubah profile
+          // Update List Table
           setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: i.profiles } : i))
           
-          // B. Update Modal jika sedang terbuka
+          // Update Modal jika sedang terbuka
           if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
              setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
           }
         }
       )
 
-      // 2. LISTEN: INSERT (Tiket Baru Masuk) -- BAGIAN INI DITAMBAHKAN
+      // 2. INSERT (Tiket Baru Masuk)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sales_issues' },
         async (payload) => {
-            console.log('🆕 TIKET BARU:', payload.new)
             const newRecord = payload.new as Issue
 
-            // PENTING: Realtime payload tidak membawa data relation (profiles).
-            // Kita harus fetch ulang 1 baris ini agar Nama User muncul di tabel.
+            // Fetch ulang agar dapat data nama pengirim (profiles)
             const { data: fullData, error } = await supabase
                 .from('sales_issues')
                 .select(`*, profiles (full_name, email, phone_number)`)
@@ -245,25 +242,40 @@ export default function SummaryPage() {
                 .single()
             
             if (fullData && !error) {
-                // Tambahkan ke paling ATAS list (karena urutan descending)
+                // Masukkan ke paling atas list
                 setIssues(prev => [fullData, ...prev])
-                
-                // Opsional: Mainkan suara notifikasi jika perlu
-                // new Audio('/notification.mp3').play().catch(() => {})
             }
         }
       )
 
-      // 3. LISTEN: CHAT BARU
+      // 3. DELETE (Tiket Dihapus)
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'sales_issues' },
+        (payload) => {
+          const deletedId = payload.old.id // ID yang dihapus
+          
+          // Hapus dari list
+          setIssues(prev => prev.filter(i => i.id !== deletedId))
+
+          // Jika user sedang membuka tiket ini, tutup modalnya
+          if (selectedIssueRef.current && selectedIssueRef.current.id === deletedId) {
+             setIsChatOpen(false)
+             setSelectedIssue(null)
+             alert('Tiket ini baru saja dihapus oleh Admin.')
+          }
+        }
+      )
+
+      // 4. CHAT BARU
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'issue_comments' },
         (payload) => {
-          console.log('💬 CHAT BARU MASUK:', payload.new)
           const newComment = payload.new as Comment
-          
           const currentOpenIssue = selectedIssueRef.current
           
+          // Jika chat masuk untuk tiket yang sedang dibuka
           if (currentOpenIssue && currentOpenIssue.id === newComment.issue_id) {
              setComments(prev => {
                 if (prev.some(c => c.id === newComment.id)) return prev
@@ -273,14 +285,14 @@ export default function SummaryPage() {
           }
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') console.log('✅ KONEKSI REALTIME BERHASIL')
-      })
+      .subscribe() // Subscribe bersih tanpa console log status
 
+    // Cleanup saat pindah halaman
     return () => {
       supabase.removeChannel(channel)
     }
   }, [supabase, authChecking])
+
 
   // --- ACTIONS ---
 
@@ -301,7 +313,7 @@ export default function SummaryPage() {
           alert('Gagal update status: ' + error.message)
           return
       }
-      // Update local state (optimistic)
+      // Optimistic update (sebenarnya akan terupdate via Realtime juga, tapi ini untuk respon instan UI)
       setIssues(prev => prev.map(i => i.id === id ? { ...i, status, ...extraFields } : i))
       setSelectedIssue(prev => prev ? { ...prev, status, ...extraFields } : null)
   }
@@ -314,8 +326,6 @@ export default function SummaryPage() {
           sender_name: 'System',
           is_admin: true
       })
-      // Tidak perlu refreshComments manual karena realtime akan menangkapnya,
-      // tapi untuk keamanan boleh dipanggil (Realtime logic sudah handle duplikat)
   }
 
   const handleDelete = async (id: number) => {
@@ -323,12 +333,12 @@ export default function SummaryPage() {
     try {
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
-        setIssues(prev => prev.filter(item => item.id !== id))
+        // Item akan hilang otomatis dari UI via Realtime Listener (DELETE event)
     } catch (err: any) { alert('Gagal hapus: ' + err.message) }
   }
 
   const handleOpenChat = async (issue: Issue) => {
-      setSelectedIssue(issue) // Ini akan trigger useEffect ref update
+      setSelectedIssue(issue)
       setIsChatOpen(true)
       setComments([]) 
       refreshComments(issue.id)
@@ -350,7 +360,7 @@ export default function SummaryPage() {
           
           if(error) throw error
 
-          // Logic: Jika Admin balas tiket OPEN -> In Progress
+          // Logic Auto Status: Jika Admin balas tiket OPEN -> In Progress
           if (isAdmin && selectedIssue.status === 'Open') {
               const now = new Date().toISOString()
               const extraFields = !selectedIssue.first_response_at 
@@ -361,10 +371,6 @@ export default function SummaryPage() {
           }
 
           setNewMessage('')
-          // Kita tidak perlu manual refreshComments() karena Realtime akan menangkap INSERT kita sendiri juga.
-          // Tapi jika realtime delay, Anda bisa uncomment bawah ini untuk instant feedback:
-          // refreshComments(selectedIssue.id)
-
       } catch (err: any) {
           alert('Gagal kirim: ' + err.message)
       } finally {
@@ -372,7 +378,7 @@ export default function SummaryPage() {
       }
   }
 
-  // --- LOGIC KONFIRMASI ---
+  // --- LOGIC KONFIRMASI STATUS ---
 
   const handleAdminProposeResolve = async () => {
       if(!selectedIssue) return
@@ -419,6 +425,7 @@ export default function SummaryPage() {
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
 
+  // --- RENDER ---
   if (authChecking) return <div className="min-h-screen flex justify-center items-center"><Loader2 className="animate-spin text-blue-600"/></div>
 
   return (
