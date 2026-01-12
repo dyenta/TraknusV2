@@ -151,9 +151,9 @@ export default function SummaryPage() {
     const minutes = Math.floor(diffMs / 60000)
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
-    if (days > 0) return `${days}h ${hours % 24}j`
-    if (hours > 0) return `${hours}j ${minutes % 60}m`
-    return `${minutes} mnt`
+    if (days > 0) return `${days}hari ${hours % 24}jam`
+    if (hours > 0) return `${hours}jam ${minutes % 60}menit`
+    return `${minutes} menit`
   }
 
   // --- INITIAL DATA FETCH ---
