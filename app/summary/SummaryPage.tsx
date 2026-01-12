@@ -541,7 +541,7 @@ export default function SummaryPage() {
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
                     
-                    <div className="p-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
+                    <div className="p-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex justify-between items- shrink-0">
                         <div>
                             <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                                 {selectedIssue.customer_name} 
@@ -636,14 +636,30 @@ export default function SummaryPage() {
 
                             {/* B. USER/ADMIN (View): Tombol Konfirmasi */}
                             {selectedIssue.status === 'Waiting Confirmation' && (
-                                <div className="flex gap-2">
-                                    <button onClick={handleUserReject} className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
-                                        <XCircle size={14}/> Belum / Revisi
-                                    </button>
-                                    <button onClick={handleUserConfirmClose} className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">
-                                        <CheckCircle size={14}/> Konfirmasi Selesai
-                                    </button>
-                                </div>
+                                <>
+                                    {/* Cek apakah user yang login adalah pemilik tiket */}
+                                    {currentUserEmail === selectedIssue.profiles?.email ? (
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={handleUserReject} 
+                                                className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+                                            >
+                                                <XCircle size={14}/> Belum / Revisi
+                                            </button>
+                                            <button 
+                                                onClick={handleUserConfirmClose} 
+                                                className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+                                            >
+                                                <CheckCircle size={14}/> Konfirmasi Selesai
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Tampilan untuk Admin / Orang lain saat menunggu user */
+                                        <span className="text-xs text-slate-500 italic flex items-center gap-1">
+                                            <Clock size={14}/> Menunggu konfirmasi dari {selectedIssue.profiles?.full_name || 'User'}...
+                                        </span>
+                                    )}
+                                </>
                             )}
 
                             {/* C. CLOSED */}
