@@ -2,39 +2,37 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, FileWarning, User, AlignLeft, AlertCircle, Users, Hash, Paperclip, Loader2, X, FileText, UploadCloud, ChevronDown, Check } from 'lucide-react' 
+import { 
+  ArrowLeft, Save, User, AlignLeft, AlertCircle, Users, Hash, 
+  Paperclip, Loader2, X, FileText, UploadCloud, ChevronDown, Check,
+  // Icon tambahan untuk Tema
+  Sun, Moon, Laptop 
+} from 'lucide-react' 
 import { createBrowserClient } from '@supabase/ssr'
+// Pastikan path ini sesuai (misal: ../components/ThemeProvider)
+import { useTheme } from '../components/ThemeProvider'
 
 // --- KOMPONEN BARU: SEARCHABLE INPUT (COMBOBOX) ---
-// Search langsung di input field, dropdown hanya menampilkan hasil.
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: any) => {
     const [isOpen, setIsOpen] = useState(false)
     const [inputValue, setInputValue] = useState(value || "")
     const containerRef = useRef<HTMLDivElement>(null)
 
-    // Sync input value jika value dari parent berubah (misal setelah save atau load data)
     useEffect(() => {
         setInputValue(value || "")
     }, [value])
 
-    // Filter options berdasarkan apa yang diketik user
     const filteredOptions = useMemo(() => {
         if (!inputValue) return options
-        // Jika input sama persis dengan salah satu option, tampilkan semua (asumsi user sedang melihat)
-        // atau tetap filter. Di sini kita tetap filter agar responsif.
         return options.filter((o: any) => 
             o.label.toLowerCase().includes(inputValue.toLowerCase())
         )
     }, [options, inputValue])
 
-    // Handle klik di luar untuk menutup dropdown
     useEffect(() => {
         const handleDown = (e: MouseEvent) => { 
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
                 setIsOpen(false)
-                // Jika user klik luar, kembalikan input ke value terakhir yang valid (jika ada)
-                // atau biarkan apa adanya (tergantung preference). 
-                // Disini kita set agar sinkron dengan state parent.
                 if (value) setInputValue(value)
                 else setInputValue("") 
             }
@@ -44,17 +42,15 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
     }, [isOpen, value])
 
     const handleSelect = (val: string) => {
-        onChange(val)      // Update state parent
-        setInputValue(val) // Update text di input
-        setIsOpen(false)   // Tutup dropdown
+        onChange(val)      
+        setInputValue(val) 
+        setIsOpen(false)   
     }
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const text = e.target.value
         setInputValue(text)
         setIsOpen(true)
-        
-        // Opsional: Jika user menghapus teks sampai habis, reset parent value
         if (text === '') {
             onChange('')
         }
@@ -62,7 +58,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
 
     return (
         <div className="relative w-full" ref={containerRef}>
-            {/* INPUT FIELD SEKALIGUS SEARCH */}
             <div className="relative">
                 <input 
                     type="text"
@@ -76,7 +71,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
                 <ChevronDown size={16} className={`absolute right-3 top-3 text-slate-400 pointer-events-none transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
-            {/* DROPDOWN MENU (Hanya List) */}
             {isOpen && !disabled && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl flex flex-col max-h-60 animate-in fade-in zoom-in-95 duration-200">
                     <div className="overflow-y-auto flex-1 p-1">
@@ -104,9 +98,11 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
     )
 }
 
-
 export default function SalesIssuesPage() {
   const router = useRouter()
+  // Hook Tema
+  const { theme, setTheme } = useTheme()
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
@@ -115,6 +111,9 @@ export default function SalesIssuesPage() {
   const [loading, setLoading] = useState(false)
   const [customerList, setCustomerList] = useState<{name: string, group: string}[]>([])
   
+  // State untuk Dropdown Tema
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+
   // State untuk Multiple Files
   const [files, setFiles] = useState<File[]>([])
 
@@ -126,6 +125,16 @@ export default function SalesIssuesPage() {
     description: '',
     created_by: ''
   })
+
+  // --- HELPER UNTUK ICON TEMA ---
+  const getThemeIcon = (t: string) => {
+    switch (t) {
+      case 'light': return <Sun size={14} />
+      case 'dark': return <Moon size={14} />
+      case 'system': return <Laptop size={14} />
+      default: return <Sun size={14} />
+    }
+  }
 
   // 1. Fetch Data
   useEffect(() => {
@@ -200,8 +209,6 @@ export default function SalesIssuesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validasi sederhana: pastikan customer dipilih dari list yang valid
-    // (Opsional: Jika boleh input manual nama baru, hapus validasi ini)
     if(!formData.customer_name) {
         alert('Mohon pilih Customer Name!')
         return
@@ -266,7 +273,6 @@ export default function SalesIssuesPage() {
     }
   }
 
-  // Siapkan options untuk SearchableSelect
   const customerOptions = customerList.map(c => ({ label: c.name, value: c.name }))
 
   return (
@@ -279,10 +285,39 @@ export default function SalesIssuesPage() {
             <button onClick={() => router.push('/')} className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm"><ArrowLeft size={20} /></button>
             <div>
                 <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
-                <FileWarning className="text-red-500" size={24}/> Input Keluhan Customer
+                <img src="/favicon.ico" alt="Logo" className="w-8 h-8 rounded"/>  Input Keluhan Customer
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Isi formulir sesuai keluhan yang diterima.</p>
             </div>
+          </div>
+
+          {/* THEME DROPDOWN */}
+          <div className="relative">
+                <button 
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} 
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm"
+                >
+                  {getThemeIcon(theme)}
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
+                </button>
+
+                {/* Dropdown Menu */}
+                <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
+                  {['light', 'dark', 'system'].map((m: any) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setTheme(m)
+                        setIsDropdownOpen(false)
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    >
+                      {getThemeIcon(m)}
+                      <span className="capitalize">{m === 'system' ? 'Sistem' : m === 'light' ? 'Terang' : 'Gelap'}</span>
+                    </button>
+                  ))}
+                </div>
           </div>
         </div>
 

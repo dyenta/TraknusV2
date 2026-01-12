@@ -2,18 +2,24 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LayoutGrid, AlertCircle, ClipboardList, LogOut, ArrowRight, User, Phone, Mail } from 'lucide-react'
+// Tambahkan ChevronDown untuk indikator dropdown
+import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
+import { useTheme } from './components/ThemeProvider'
 
 export default function MenuPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   
   // State untuk data profil
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [userPhone, setUserPhone] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  
+  // State untuk Dropdown Tema
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,29 +28,22 @@ export default function MenuPage() {
 
   useEffect(() => {
     const getData = async () => {
-      // 1. Cek User Auth (Siapa yang login?)
       const { data: { user } } = await supabase.auth.getUser()
       
       if (user) {
-        // Set email dari auth sebagai fallback
         setUserEmail(user.email || null)
 
-        // 2. Ambil data detail dari tabel 'profiles' berdasarkan ID user
-        const { data: profile, error } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single() // Ambil satu baris saja
+          .single()
 
         if (profile) {
-          // Jika ada di tabel profiles, pakai data dari sana
           setUserName(profile.full_name || 'Pengguna')
           setUserPhone(profile.phone_number || '-')
-          // Update email jika di tabel profiles berbeda (opsional)
           if (profile.email) setUserEmail(profile.email)
         } else {
-          // Fallback: Jika belum ada di tabel profiles, coba ambil dari metadata
-          // Ini berguna agar tidak error saat transisi data
           setUserName(user.user_metadata?.full_name || 'Pengguna')
           setUserPhone(user.user_metadata?.phone_number || '-')
         }
@@ -60,6 +59,25 @@ export default function MenuPage() {
     await supabase.auth.signOut()
     router.refresh()
     router.push('/login')
+  }
+
+  // --- HELPER UNTUK ICON TEMA ---
+  const getThemeIcon = (t: string) => {
+    switch (t) {
+      case 'light': return <Sun size={14} />
+      case 'dark': return <Moon size={14} />
+      case 'system': return <Laptop size={14} />
+      default: return <Sun size={14} />
+    }
+  }
+
+  const getThemeLabel = (t: string) => {
+    switch (t) {
+      case 'light': return 'Terang'
+      case 'dark': return 'Gelap'
+      case 'system': return 'Sistem'
+      default: return 'Tema'
+    }
   }
 
   // --- CONFIG MENU ---
@@ -78,7 +96,7 @@ export default function MenuPage() {
       title: "Sales Issues",
       desc: "Input dan pelaporan kendala/masalah di lapangan.",
       href: "/sales-issues",
-      icon: AlertCircle,
+      icon: FileWarning,
       color: "text-rose-600 dark:text-rose-400",
       bg: "bg-rose-50 dark:bg-rose-900/20",
       borderHover: "hover:border-rose-500 dark:hover:border-rose-500",
@@ -88,7 +106,7 @@ export default function MenuPage() {
       title: "Summary Report",
       desc: "Ringkasan dan rekapitulasi data isu secara keseluruhan.",
       href: "/summary",
-      icon: ClipboardList,
+      icon: LayoutList,
       color: "text-emerald-600 dark:text-emerald-400",
       bg: "bg-emerald-50 dark:bg-emerald-900/20",
       borderHover: "hover:border-emerald-500 dark:hover:border-emerald-500",
@@ -96,7 +114,6 @@ export default function MenuPage() {
     },
   ]
 
-  // --- FILTER MENU ---
   const visibleMenuItems = allMenuItems.filter((item) => {
     if (!item.restricted) return true
     if (userEmail) {
@@ -107,7 +124,6 @@ export default function MenuPage() {
     return false
   })
 
-  // --- DYNAMIC GRID LAYOUT ---
   const getGridClass = (count: number) => {
     switch (count) {
       case 3: return "md:grid-cols-3"
@@ -133,38 +149,77 @@ export default function MenuPage() {
       
       <div className="w-full max-w-6xl space-y-10">
         
-        {/* HEADER SECTION - Data Real dari Tabel Profiles */}
+        {/* HEADER SECTION */}
         <div className="flex flex-col items-center space-y-4">
           <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-15 h-15 rounded-xl mb-4 shadow-sm"/>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100 tracking-tight text-center">
             Portal Aplikasi
           </h1>
           
-          {/* Kartu Profil */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full px-6 py-2 shadow-sm flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-slate-600 dark:text-slate-300">
+          {/* CONTAINER: PROFILE + ACTIONS */}
+          <div className="flex flex-col xl:flex-row items-center gap-3 w-full justify-center relative z-20">
             
-            {/* Nama */}
-            <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
-               <User size={16} className="text-emerald-600" />
-               <span>{userName}</span>
+            {/* KARTU PROFIL */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full px-6 py-2 shadow-sm flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-slate-600 dark:text-slate-300">
+              <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
+                <User size={16} className="text-emerald-600" />
+                <span>{userName}</span>
+              </div>
+              <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
+              <div className="flex items-center gap-2">
+                <Mail size={16} className="text-blue-500" />
+                <span>{userEmail}</span>
+              </div>
+              <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
+              <div className="flex items-center gap-2">
+                <Phone size={16} className="text-rose-500" />
+                <span>{userPhone}</span>
+              </div>
             </div>
 
-            <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
-
-            {/* Email */}
+            {/* ACTION GROUP: THEME DROPDOWN + LOGOUT */}
             <div className="flex items-center gap-2">
-               <Mail size={16} className="text-blue-500" />
-               <span>{userEmail}</span>
-            </div>
+              
+              {/* 1. THEME DROPDOWN */}
+              <div className="relative">
+                <button 
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} // Delay biar klik menu sempat tereksekusi
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm"
+                >
+                  {getThemeIcon(theme)}
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
+                </button>
 
-            <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
+                {/* Dropdown Menu */}
+                <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
+                  {['light', 'dark', 'system'].map((m: any) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setTheme(m)
+                        setIsDropdownOpen(false)
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    >
+                      {getThemeIcon(m)}
+                      <span className="capitalize">{m === 'system' ? 'Sistem' : m === 'light' ? 'Terang' : 'Gelap'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {/* Telepon */}
-            <div className="flex items-center gap-2">
-               <Phone size={16} className="text-rose-500" />
-               <span>{userPhone}</span>
+              {/* 2. LOGOUT BUTTON */}
+              <button 
+                onClick={handleLogout}
+                className="group flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-800 transition-all text-sm font-bold shadow-sm"
+                title="Keluar Aplikasi"
+              >
+                <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform"/>
+                <span className="hidden sm:inline">Keluar</span>
+              </button>
+
             </div>
-            
           </div>
         </div>
 
@@ -195,17 +250,6 @@ export default function MenuPage() {
               </div>
             </Link>
           ))}
-        </div>
-
-        {/* FOOTER */}
-        <div className="flex justify-center pt-4">
-          <button 
-            onClick={handleLogout}
-            className="group flex items-center gap-2 px-6 py-2.5 rounded-full bg-transparent border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-800 transition-all text-sm font-medium"
-          >
-            <LogOut size={16} className="group-hover:-translate-x-0.5 transition-transform"/>
-            <span>Keluar Aplikasi</span>
-          </button>
         </div>
 
       </div>

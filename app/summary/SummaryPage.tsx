@@ -5,8 +5,13 @@ import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { 
   ArrowLeft, Search, Trash2, LayoutList, Loader2, User, 
-  X, Send, Mail, Phone, Users, Hash, Paperclip, ExternalLink, MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle
+  X, Send, Mail, Phone, Users, Hash, Paperclip, ExternalLink, 
+  MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle,
+  // Icon tambahan untuk Tema
+  Sun, Moon, Laptop, ChevronDown
 } from 'lucide-react'
+// Pastikan path ini sesuai dengan struktur folder Anda (misal: ../components/ThemeProvider)
+import { useTheme } from '../components/ThemeProvider' 
 
 // --- INTERFACE ---
 interface Issue {
@@ -43,6 +48,9 @@ interface Comment {
 
 export default function SummaryPage() {
   const router = useRouter()
+  // Hook Tema
+  const { theme, setTheme } = useTheme()
+  
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
@@ -63,9 +71,22 @@ export default function SummaryPage() {
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // State Dropdown Tema
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+
   // Filter
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
+
+  // --- HELPER UNTUK ICON TEMA ---
+  const getThemeIcon = (t: string) => {
+    switch (t) {
+      case 'light': return <Sun size={14} />
+      case 'dark': return <Moon size={14} />
+      case 'system': return <Laptop size={14} />
+      default: return <Sun size={14} />
+    }
+  }
 
   // --- HELPER SCROLL ---
   const scrollToBottom = () => {
@@ -317,7 +338,7 @@ export default function SummaryPage() {
 
   const getStatusColor = (st: string) => {
     if (st === 'Closed') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-    if (st === 'Waiting Confirmation') return 'bg-amber-100 text-amber-700 border-amber-200' // bg-slate-100 text-slate-700 border-slate-200
+    if (st === 'Waiting Confirmation') return 'bg-amber-100 text-amber-700 border-amber-200'
     if (st === 'In Progress') return 'bg-amber-100 text-amber-700 border-amber-200'
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
@@ -342,22 +363,55 @@ export default function SummaryPage() {
                 {/* Wrapper untuk Judul & Deskripsi */}
                 <div>
                     <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
-                        <LayoutList className="text-emerald-500" size={24}/> Summary Keluhan
+                        <img src="/favicon.ico" alt="Logo" className="w-8 h-8 rounded"/>  Summary Keluhan
                     </h1>
-                    {/* Tambahan Deskripsi Disini */}
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Data keluhan customer yang perlu ditindaklanjuti
                     </p>
                 </div>
             </div>
 
-            {/* Tombol Input Baru */}
-            <button 
-                onClick={() => router.push('/sales-issues')} 
-                className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm"
-            >
-                + Input Baru
-            </button>
+            {/* ACTION GROUP: INPUT BARU + THEME DROPDOWN */}
+            <div className="flex items-center gap-3">
+                
+                {/* 1. INPUT BARU */}
+                <button 
+                    onClick={() => router.push('/sales-issues')} 
+                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 text-sm whitespace-nowrap"
+                >
+                    + Input Baru
+                </button>
+
+                {/* 2. THEME DROPDOWN */}
+                <div className="relative">
+                    <button 
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} 
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm"
+                    >
+                      {getThemeIcon(theme)}
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
+                      {['light', 'dark', 'system'].map((m: any) => (
+                        <button
+                          key={m}
+                          onClick={() => {
+                            setTheme(m)
+                            setIsDropdownOpen(false)
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                        >
+                          {getThemeIcon(m)}
+                          <span className="capitalize">{m === 'system' ? 'Sistem' : m === 'light' ? 'Terang' : 'Gelap'}</span>
+                        </button>
+                      ))}
+                    </div>
+                </div>
+
+            </div>
         </div>
 
         {/* Filters */}
@@ -365,22 +419,22 @@ export default function SummaryPage() {
             <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                 <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} 
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm"/>
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm dark:text-white dark:border-slate-700"/>
             </div>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm">
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700">
                 <option value="All">Semua Status</option>
                 <option value="Open">Open</option>
                 <option value="In Progress">In Progress</option>
-                <option value="Waiting Confirmation">Waiting Confirmation</option> {/* NEW OPTION */}
+                <option value="Waiting Confirmation">Waiting Confirmation</option>
                 <option value="Closed">Closed</option>
             </select>
         </div>
 
         {/* Tabel Utama */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 uppercase text-xs font-bold border-b">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 uppercase text-xs font-bold border-b dark:border-slate-700">
                         <tr>
                             <th className="p-4">Tanggal Input</th>
                             <th className="p-4">Customer</th>
@@ -389,7 +443,7 @@ export default function SummaryPage() {
                             <th className="p-4 text-center">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y dark:divide-slate-800">
                         {filteredData.map((item) => (
                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                                 <td className="p-4 align-top">
@@ -487,9 +541,9 @@ export default function SummaryPage() {
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
                     
-                    <div className="p-4 border-b bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
+                    <div className="p-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
                         <div>
-                            <h3 className="font-bold text-lg flex items-center gap-2">
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                                 {selectedIssue.customer_name} 
                                 <span className={`text-[10px] px-2 py-0.5 rounded border uppercase ${getStatusColor(selectedIssue.status)}`}>{selectedIssue.status}</span>
                             </h3>
@@ -497,12 +551,12 @@ export default function SummaryPage() {
                                 <Hash size={12}/> {selectedIssue.unit_number} 
                             </div>
                         </div>
-                        <button onClick={() => setIsChatOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition"><X size={20}/></button>
+                        <button onClick={() => setIsChatOpen(false)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition text-slate-500 dark:text-slate-400"><X size={20}/></button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100 dark:bg-slate-950/50">
                         {/* Masalah Awal */}
-                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 shadow-sm mb-6">
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-6">
                             <div className="flex justify-between items-start mb-2">
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Keluhan Awal</span>
                                 <span className="text-[10px] text-slate-400">{new Date(selectedIssue.created_at).toLocaleDateString('id-ID', {day: 'numeric', month:'short', year:'numeric'})}</span>
@@ -520,7 +574,7 @@ export default function SummaryPage() {
                                 
                                 if(isSystem) return (
                                     <div key={c.id} className="flex justify-center my-4">
-                                        <span className="text-[10px] text-slate-600 bg-white dark:bg-slate-900 border border-slate-200 shadow-sm mb-6 px-3 py-1 rounded-full font-bold">{c.message}</span>
+                                        <span className="text-[10px] text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 px-3 py-1 rounded-full font-bold">{c.message}</span>
                                     </div>
                                 )
 
@@ -529,7 +583,7 @@ export default function SummaryPage() {
                                         <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
                                             c.is_admin 
                                                 ? 'bg-blue-600 text-white rounded-tr-none' 
-                                                : 'bg-white dark:bg-slate-800 border border-slate-200 text-slate-700 dark:text-slate-200 rounded-tl-none'
+                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-none'
                                         }`}>
                                             <div className="font-bold text-[10px] mb-1 opacity-80 flex justify-between gap-4">
                                                 <span>{c.sender_name} {c.is_admin ? '(Key Account)' : ''}</span>
@@ -549,7 +603,7 @@ export default function SummaryPage() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    <div className="p-3 bg-white dark:bg-slate-900 border-t shrink-0">
+                    <div className="p-3 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shrink-0">
                         {/* 1. Input Chat (Hanya jika belum Closed) */}
                         {selectedIssue.status !== 'Closed' && (
                             <form onSubmit={handleSendMessage} className="flex gap-2 mb-3">
@@ -558,7 +612,7 @@ export default function SummaryPage() {
                                     value={newMessage}
                                     onChange={e => setNewMessage(e.target.value)}
                                     placeholder="Tulis balasan..."
-                                    className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
                                 />
                                 <button 
                                     type="submit" 
@@ -580,7 +634,7 @@ export default function SummaryPage() {
                                 </button>
                             )}
 
-                            {/* B. USER/ADMIN (View): Tombol Konfirmasi (Hanya User yg bisa klik, atau logic disesuaikan) */}
+                            {/* B. USER/ADMIN (View): Tombol Konfirmasi */}
                             {selectedIssue.status === 'Waiting Confirmation' && (
                                 <div className="flex gap-2">
                                     <button onClick={handleUserReject} className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">

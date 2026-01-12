@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
-  LayoutGrid, RefreshCcw, Filter, MinusSquare, PlusSquare, 
+  LayoutGrid, RefreshCw, Filter, MinusSquare, PlusSquare, 
   Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, 
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, 
   Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList 
@@ -126,8 +126,8 @@ const DimensionSelectBox = ({ label, value, onChange, options }: any) => {
       </label>
       <button 
         onClick={() => setIsOpen(!isOpen)} 
-        className={`flex items-center justify-between gap-2 w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors text-left ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}
-      >
+        className={`flex items-center justify-between gap-2 w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors text-left 
+          ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
         <span className="truncate font-medium text-slate-700 dark:text-slate-200">{selectedLabel}</span>
         <ChevronDown size={14} className="text-slate-400 shrink-0" />
       </button>
@@ -140,8 +140,8 @@ const DimensionSelectBox = ({ label, value, onChange, options }: any) => {
               <button 
                 key={option.value} 
                 onClick={() => { onChange(option.value); setIsOpen(false); }} 
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors ${value === option.value ? 'text-blue-600 dark:text-blue-400 font-bold bg-slate-50 dark:bg-slate-800/50' : 'text-slate-700 dark:text-slate-200'}`}
-              >
+                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors 
+                  ${value === option.value ? 'text-blue-600 dark:text-blue-400 font-bold bg-slate-50 dark:bg-slate-800/50' : 'text-slate-700 dark:text-slate-200'}`}>
                 <span>{option.label}</span>
                 {value === option.value && <Check size={12}/>}
               </button>
@@ -304,8 +304,8 @@ const MultiSelect = ({ label, options, rawOptions, selectedValues, onChange }: a
         </label>
         <button 
           onClick={() => setIsOpen(!isOpen)} 
-          className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}
-        >
+          className={`flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors 
+            ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
           <span className="truncate font-medium text-slate-700 dark:text-slate-200 max-w-25 text-left">
             {getButtonLabel()}
           </span>
@@ -780,12 +780,6 @@ export default function SalesPage() {
     setIsMenuOpen(false);
   }
 
-  const handleLogout = async () => { 
-    await supabase.auth.signOut(); 
-    router.refresh(); 
-    router.push('/login');
-  }
-
   // --- FORMATTERS ---
   const formatNumber = (n: number) => n ? n.toLocaleString('id-ID') : '-';
   
@@ -809,7 +803,7 @@ export default function SalesPage() {
   const renderLoadingOverlay = (message: string) => (
     <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl transition-all">
       {isRefreshing ? (
-         <><RefreshCcw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span></>
+         <><RefreshCw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">Updating Database...</span></>
       ) : (
          <><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500 dark:text-slate-400">{message}</span></>
       )}
@@ -827,16 +821,18 @@ export default function SalesPage() {
         >
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
             <div>
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                <LayoutGrid className="text-blue-600 dark:text-blue-500" size={24}/> 
-                Dashboard Sales
-              </h1>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 ml-8">Dynamic Pivot & Filters</p>
-            </div>
+                    <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
+                        <img src="/favicon.ico" alt="Logo" className="w-8 h-8 rounded"/>  Dashboard Sales
+                    </h1>
+                    {/* Tambahan Deskripsi Disini */}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Dashboard sales untuk memantau performa penjualan dan analisis data terkait.
+                    </p>
+                </div>
             
             <div className="flex items-center gap-2 relative">
                 <button onClick={fetchAnalyticsData} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800" title="Refresh Data">
-                  <RefreshCcw size={16} className={isLoading ? "animate-spin" : ""}/>
+                  <RefreshCw size={16} className={isLoading ? "animate-spin" : ""}/>
                 </button>
                 
                 {/* MENU DROPDOWN */}
@@ -867,16 +863,26 @@ export default function SalesPage() {
                                  {/* Navigation Links */}
                                  <div className="p-1.5 border-b border-slate-100 dark:border-slate-800">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">Customer Issue</div>
-                                    <button onClick={() => router.push('/sales-issues')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5"><FileWarning size={14} className="text-red-400"/> <span>Input Keluhan Baru</span></button>
-                                    <button onClick={() => router.push('/summary')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors"><LayoutList size={14} className="text-emerald-500"/> <span>Lihat Summary Keluhan</span></button>
+                                    <button onClick={() => router.push('/sales-issues')} 
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                                      <FileWarning size={14} className="text-red-400"/> <span>Input Keluhan Baru</span>
+                                    </button>
+                                    <button onClick={() => router.push('/summary')} 
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
+                                      <LayoutList size={14} className="text-emerald-500"/> <span>Lihat Summary Keluhan</span>
+                                    </button>
                                  </div>
                                  {/* System Actions */}
                                  <div className="p-1.5">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
-                                    <button onClick={handleRefreshDatabase} disabled={isRefreshing} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50"><Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span></button>
-                                 </div>
-                                 <div className="border-t border-slate-100 dark:border-slate-800 p-1">
-                                    <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-red-900/20 text-blue-500 rounded transition-colors"><LogOut size={14}/> <span>Menu</span></button>
+                                    <button onClick={handleRefreshDatabase} disabled={isRefreshing} 
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50">
+                                      <Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span>
+                                    </button>
+                                    <button onClick={() => router.push('/')} 
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
+                                      <LogOut size={14} className="text-blue-500"/> <span>Menu</span>
+                                    </button>
                                  </div>
                             </div>
                         </div>
@@ -1027,8 +1033,7 @@ export default function SalesPage() {
                         
                         let prevValue = node.values[prevKey] || 0;
                         if (isSubtotal && prevValue === 0) {
-                          prevValue = node.values[(parseInt(info.parent) - 1) + ''] || 0;
-                        }
+                          prevValue = node.values[(parseInt(info.parent) - 1) + ''] || 0;}
 
                         const cellBackground = isSubtotal 
                           ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' 
@@ -1072,8 +1077,7 @@ export default function SalesPage() {
                       
                       let prevTotal = pivotData.colTotals[prevKey] || 0;
                       if (info.type === 'subtotal' && prevTotal === 0) {
-                        prevTotal = pivotData.colTotals[(parseInt(info.parent) - 1) + ''] || 0;
-                      }
+                        prevTotal = pivotData.colTotals[(parseInt(info.parent) - 1) + ''] || 0;}
 
                       return (
                         <td key={key} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${info.type === 'subtotal' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
