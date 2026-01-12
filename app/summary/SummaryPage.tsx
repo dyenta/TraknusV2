@@ -208,6 +208,8 @@ export default function SummaryPage() {
 
     const channel = supabase
       .channel('app-changes')
+      
+      // 1. LISTEN: UPDATE STATUS (Tiket Berubah)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sales_issues' },
@@ -215,16 +217,44 @@ export default function SummaryPage() {
           console.log('🔔 STATUS UPDATE:', payload.new)
           const updated = payload.new as Issue
           
-          // 1. Update List Utama
+          // A. Update List Utama
+          // Kita pertahankan profile lama karena update status tidak mengubah profile
           setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: i.profiles } : i))
           
-          // 2. Update Modal jika sedang terbuka
-          // Gunakan Ref untuk mengecek apakah issue yang diupdate adalah yang sedang dibuka
+          // B. Update Modal jika sedang terbuka
           if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
              setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
           }
         }
       )
+
+      // 2. LISTEN: INSERT (Tiket Baru Masuk) -- BAGIAN INI DITAMBAHKAN
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sales_issues' },
+        async (payload) => {
+            console.log('🆕 TIKET BARU:', payload.new)
+            const newRecord = payload.new as Issue
+
+            // PENTING: Realtime payload tidak membawa data relation (profiles).
+            // Kita harus fetch ulang 1 baris ini agar Nama User muncul di tabel.
+            const { data: fullData, error } = await supabase
+                .from('sales_issues')
+                .select(`*, profiles (full_name, email, phone_number)`)
+                .eq('id', newRecord.id)
+                .single()
+            
+            if (fullData && !error) {
+                // Tambahkan ke paling ATAS list (karena urutan descending)
+                setIssues(prev => [fullData, ...prev])
+                
+                // Opsional: Mainkan suara notifikasi jika perlu
+                // new Audio('/notification.mp3').play().catch(() => {})
+            }
+        }
+      )
+
+      // 3. LISTEN: CHAT BARU
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'issue_comments' },
@@ -232,15 +262,11 @@ export default function SummaryPage() {
           console.log('💬 CHAT BARU MASUK:', payload.new)
           const newComment = payload.new as Comment
           
-          // Cek apakah chat ini milik issue yang sedang dibuka?
-          // Kita pakai REF (selectedIssueRef) karena state biasa mungkin "stale" di dalam callback ini
           const currentOpenIssue = selectedIssueRef.current
           
           if (currentOpenIssue && currentOpenIssue.id === newComment.issue_id) {
              setComments(prev => {
-                // Cegah duplikat (jika optimistik update kita lebih cepat dari realtime)
                 if (prev.some(c => c.id === newComment.id)) return prev
-                
                 setTimeout(scrollToBottom, 100)
                 return [...prev, newComment]
              })
@@ -249,14 +275,12 @@ export default function SummaryPage() {
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') console.log('✅ KONEKSI REALTIME BERHASIL')
-        if (status === 'CHANNEL_ERROR') console.error('❌ KONEKSI REALTIME GAGAL (Cek Network/Firewall)')
-        if (status === 'TIMED_OUT') console.warn('⚠️ KONEKSI TIMEOUT')
       })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, authChecking]) // Dependency minimal agar tidak reset terus
+  }, [supabase, authChecking])
 
   // --- ACTIONS ---
 
