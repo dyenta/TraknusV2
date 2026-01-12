@@ -83,16 +83,6 @@ export default function MenuPage() {
   // --- CONFIG MENU ---
   const allMenuItems = [
     {
-      title: "Sales Analytics",
-      desc: "Dashboard monitoring performa penjualan & pivot data dinamis.",
-      href: "/sales",
-      icon: LayoutGrid,
-      color: "text-blue-600 dark:text-blue-400",
-      bg: "bg-blue-50 dark:bg-blue-900/20",
-      borderHover: "hover:border-blue-500 dark:hover:border-blue-500",
-      restricted: true, 
-    },
-    {
       title: "Sales Issues",
       desc: "Input dan pelaporan kendala/masalah di lapangan.",
       href: "/sales-issues",
@@ -111,6 +101,16 @@ export default function MenuPage() {
       bg: "bg-emerald-50 dark:bg-emerald-900/20",
       borderHover: "hover:border-emerald-500 dark:hover:border-emerald-500",
       restricted: false,
+    },
+    {
+      title: "Sales Analytics",
+      desc: "Dashboard monitoring performa penjualan & pivot data dinamis.",
+      href: "/sales",
+      icon: LayoutGrid,
+      color: "text-blue-600 dark:text-blue-400",
+      bg: "bg-blue-50 dark:bg-blue-900/20",
+      borderHover: "hover:border-blue-500 dark:hover:border-blue-500",
+      restricted: true, 
     },
   ]
 
