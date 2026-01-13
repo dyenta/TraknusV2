@@ -328,7 +328,7 @@ export default function SummaryPage() {
       })
   }
 
-const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number) => {
     if(!confirm('PERINGATAN: Apakah Anda yakin ingin menghapus tiket ini beserta lampirannya secara permanen?')) return
     
     // 1. Cari data tiket yang mau dihapus untuk cek attachment
@@ -366,6 +366,13 @@ const handleDelete = async (id: number) => {
     } catch (err: any) { 
         alert('Gagal hapus: ' + err.message) 
     }
+  }
+
+  const handleOpenChat = async (issue: Issue) => {
+      setSelectedIssue(issue)
+      setIsChatOpen(true)
+      setComments([]) 
+      refreshComments(issue.id)
   }
 
   const handleSendMessage = async (e?: React.FormEvent) => {
