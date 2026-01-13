@@ -335,22 +335,59 @@ export default function SummaryPage() {
     const issueToDelete = issues.find(i => i.id === id)
     if (!issueToDelete) return
 
+    setLoading(true) // Opsional: Beri indikasi loading agar user tidak klik 2x
+
     try {
-        // 2. Hapus File di Storage (Jika ada)
+        // 2. LOGIC BARU: Hapus File di Storage (Support Single & Multiple Files)
         if (issueToDelete.attachment_url) {
-            // Ambil nama file dari URL
-            // Contoh URL: .../issue-attachments/1709...jpg
-            // Kita butuh bagian akhir (nama file)-nya saja
-            const fileName = issueToDelete.attachment_url.split('/').pop()
+            let filePaths: string[] = []
+
+            // A. Parsing URL (Cek apakah JSON Array atau String biasa)
+            try {
+                const parsed = JSON.parse(issueToDelete.attachment_url)
+                if (Array.isArray(parsed)) {
+                    filePaths = parsed // Jika array ["url1", "url2"]
+                } else {
+                    filePaths = [issueToDelete.attachment_url] // Jika string "url1"
+                }
+            } catch (e) {
+                // Jika error parse (bukan JSON), anggap string URL biasa
+                filePaths = [issueToDelete.attachment_url]
+            }
+
+            // B. Ekstrak "Path File" yang benar dari URL Lengkap
+            // URL Supabase: https://xyz.supabase.co/.../public/issue-attachments/folder/file.jpg
+            // Kita butuh: folder/file.jpg
+            const bucketName = 'issue-attachments'
             
-            if (fileName) {
+            const filesToRemove = filePaths.map(url => {
+                try {
+                    const decodedUrl = decodeURIComponent(url)
+                    // Cari posisi nama bucket di URL
+                    const splitKey = `/public/${bucketName}/`
+                    const parts = decodedUrl.split(splitKey)
+                    
+                    if (parts.length > 1) {
+                        return parts[1] // Mengambil path setelah bucket name
+                    } else {
+                        // Fallback: Jika struktur URL beda, coba ambil nama file saja (cara lama)
+                        return decodedUrl.split('/').pop() 
+                    }
+                } catch {
+                    return null
+                }
+            }).filter(path => path !== undefined && path !== null) as string[]
+
+            // C. Eksekusi Hapus dari Storage
+            if (filesToRemove.length > 0) {
                 const { error: storageError } = await supabase.storage
-                    .from('issue-attachments') // Nama Bucket
-                    .remove([fileName])      // Hapus file berdasarkan nama
+                    .from(bucketName)
+                    .remove(filesToRemove) // remove() menerima array string ['path1', 'path2']
                 
                 if (storageError) {
-                    console.error('Gagal hapus file:', storageError.message)
-                    // Kita lanjut saja biar database tetap terhapus, meski file gagal
+                    console.error('Gagal hapus file fisik:', storageError.message)
+                    // Kita tidak throw error di sini agar penghapusan data DB tetap lanjut
+                    // meskipun file gagal dihapus (misal file sudah hilang duluan)
                 }
             }
         }
@@ -361,10 +398,19 @@ export default function SummaryPage() {
 
         // 4. Update tampilan (Hapus dari state lokal)
         setIssues(prev => prev.filter(item => item.id !== id))
+        
+        // Tutup modal chat jika tiket yang dihapus sedang dibuka
+        if (selectedIssue?.id === id) {
+            setIsChatOpen(false)
+            setSelectedIssue(null)
+        }
+
         alert('Data dan lampiran berhasil dihapus.')
 
     } catch (err: any) { 
         alert('Gagal hapus: ' + err.message) 
+    } finally {
+        setLoading(false)
     }
   }
 
