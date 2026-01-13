@@ -623,6 +623,34 @@ export default function SalesPage() {
     activeLevels: activeHierarchyLevels 
   });
 
+  const visibleYears = useMemo(() => {
+    // Ambil bagian tahun (sebelum tanda -) dari setiap colKey, lalu unik-kan dan urutkan
+    const years = Array.from(new Set(pivotData.colKeys.map(k => k.split('-')[0]))).sort();
+    return years;
+  }, [pivotData.colKeys]);
+
+  // Helper untuk mencari Key sebelumnya berdasarkan urutan visual, bukan matematika (year - 1)
+  const getDynamicPrevKey = (key: string, info: any) => {
+    const currentYear = info.parent;
+    const currentIndex = visibleYears.indexOf(currentYear);
+    
+    // Jika ini adalah tahun pertama di list, tidak ada pembanding (return null)
+    if (currentIndex <= 0) return null;
+
+    const prevYear = visibleYears[currentIndex - 1];
+
+    if (info.type === 'year') {
+      return prevYear;
+    } else if (info.type === 'subtotal') {
+      return `${prevYear}-Total`;
+    } else if (info.type === 'month') {
+      // Format key bulan: "YYYY-MM" -> kita ganti YYYY nya dengan prevYear
+      const monthPart = key.split('-')[1];
+      return `${prevYear}-${monthPart}`;
+    }
+    return null;
+  };
+
   const trendChartData = useMemo(() => {
     const map: any = {};
     chartData.forEach(item => {
@@ -1025,15 +1053,16 @@ export default function SalesPage() {
                         const isSubtotal = info.type === 'subtotal';
                         
                         // Logic for calculating Previous Value (for YoY)
-                        let prevKey = info.type === 'year' 
-                          ? (parseInt(info.parent) - 1) + '' 
-                          : info.type === 'month' 
-                            ? `${parseInt(info.parent) - 1}-${key.split('-')[1]}` 
-                            : `${parseInt(info.parent) - 1}-Total`;
-                        
-                        let prevValue = node.values[prevKey] || 0;
-                        if (isSubtotal && prevValue === 0) {
-                          prevValue = node.values[(parseInt(info.parent) - 1) + ''] || 0;}
+                        const prevKey = getDynamicPrevKey(key, info);
+                        let prevValue = (prevKey && node.values[prevKey]) ? node.values[prevKey] : 0;
+
+                        // Fallback khusus Subtotal: jika subtotal bulan kosong, coba cari total tahunan murninya
+                        // (Opsional, tergantung struktur data Anda, tapi aman dipertahankan)
+                        if (isSubtotal && prevValue === 0 && prevKey) {
+                          // Coba ambil prevYear raw
+                          const rawPrevYear = prevKey.split('-')[0]; 
+                          prevValue = node.values[rawPrevYear] || 0;
+                        }
 
                         const cellBackground = isSubtotal 
                           ? 'bg-slate-50 dark:bg-slate-800/50 font-bold border-l border-slate-200 dark:border-slate-700' 
@@ -1069,15 +1098,13 @@ export default function SalesPage() {
                       const total = pivotData.colTotals[key] || 0;
                       
                       // Logic for Previous Total (YoY)
-                      let prevKey = info.type === 'year' 
-                        ? (parseInt(info.parent) - 1) + '' 
-                        : info.type === 'month' 
-                          ? `${parseInt(info.parent) - 1}-${key.split('-')[1]}` 
-                          : `${parseInt(info.parent) - 1}-Total`;
-                      
-                      let prevTotal = pivotData.colTotals[prevKey] || 0;
-                      if (info.type === 'subtotal' && prevTotal === 0) {
-                        prevTotal = pivotData.colTotals[(parseInt(info.parent) - 1) + ''] || 0;}
+                      const prevKey = getDynamicPrevKey(key, info);
+                      let prevTotal = (prevKey && pivotData.colTotals[prevKey]) ? pivotData.colTotals[prevKey] : 0;
+
+                      if (info.type === 'subtotal' && prevTotal === 0 && prevKey) {
+                        const rawPrevYear = prevKey.split('-')[0];
+                        prevTotal = pivotData.colTotals[rawPrevYear] || 0;
+                      }
 
                       return (
                         <td key={key} className={`p-3 text-right border-t border-r border-slate-200 dark:border-slate-700 ${info.type === 'subtotal' ? 'bg-slate-200 dark:bg-slate-700' : ''}`}>
