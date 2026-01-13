@@ -72,18 +72,58 @@ export default function SummaryPage() {
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // REF UNTUK REALTIME (Supaya listener selalu baca state terbaru tanpa stale closure)
+  // REF UNTUK REALTIME
   const selectedIssueRef = useRef<Issue | null>(null)
 
-  // Update ref setiap kali selectedIssue berubah
   useEffect(() => {
     selectedIssueRef.current = selectedIssue
   }, [selectedIssue])
 
-  // State UI Lainnya
+  // State Filter UI
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
+  const [filterGroup, setFilterGroup] = useState('All')
+
+  // --- LOGIC FILTER BI-DIRECTIONAL ---
+  const availableGroups = useMemo(() => {
+    let data = issues
+    if (filterStatus !== 'All') {
+      data = data.filter(i => i.status === filterStatus)
+    }
+    const groups = data.map(i => i.cust_group).filter(Boolean) as string[]
+    const uniqueGroups = Array.from(new Set(groups)).sort()
+    const hasNoGroupData = data.some(i => !i.cust_group)
+    if (hasNoGroupData) uniqueGroups.push('NO_GROUP')
+    return uniqueGroups
+  }, [issues, filterStatus])
+
+  const availableStatuses = useMemo(() => {
+    let data = issues
+    if (filterGroup !== 'All') {
+      if (filterGroup === 'NO_GROUP') {
+          data = data.filter(i => !i.cust_group)
+      } else {
+          data = data.filter(i => i.cust_group === filterGroup)
+      }
+    }
+    const sts = data.map(i => i.status)
+    const uniqueSt = Array.from(new Set(sts))
+    const sortOrder = ['Open', 'In Progress', 'Waiting Confirmation', 'Closed']
+    return uniqueSt.sort((a, b) => sortOrder.indexOf(a) - sortOrder.indexOf(b))
+  }, [issues, filterGroup])
+
+  useEffect(() => {
+    if (filterGroup !== 'All' && !availableGroups.includes(filterGroup)) {
+      setFilterGroup('All')
+    }
+  }, [filterStatus, availableGroups, filterGroup])
+
+  useEffect(() => {
+    if (filterStatus !== 'All' && !availableStatuses.includes(filterStatus)) {
+      setFilterStatus('All')
+    }
+  }, [filterGroup, availableStatuses, filterStatus])
 
   // --- HELPER FUNCTIONS ---
   const getThemeIcon = (t: string) => {
@@ -110,15 +150,10 @@ export default function SummaryPage() {
 
   const renderAttachments = (attachmentUrl: string | null) => {
     if (!attachmentUrl) return null
-
     let urls: string[] = []
     try {
         const parsed = JSON.parse(attachmentUrl)
-        if (Array.isArray(parsed)) {
-            urls = parsed
-        } else {
-            urls = [attachmentUrl]
-        }
+        urls = Array.isArray(parsed) ? parsed : [attachmentUrl]
     } catch (e) {
         urls = [attachmentUrl]
     }
@@ -126,16 +161,8 @@ export default function SummaryPage() {
     return (
         <div className="mt-2 flex flex-wrap gap-2">
             {urls.map((url, idx) => (
-                <a 
-                    key={idx} 
-                    href={url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    title={getFileNameFromUrl(url)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold hover:bg-blue-100 transition-colors max-w-50"
-                >
-                    <Paperclip size={10} className="shrink-0"/> 
-                    <span className="truncate">{getFileNameFromUrl(url)}</span>
+                <a key={idx} href={url} target="_blank" rel="noopener noreferrer" title={getFileNameFromUrl(url)} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold hover:bg-blue-100 transition-colors max-w-50">
+                    <Paperclip size={10} className="shrink-0"/> <span className="truncate">{getFileNameFromUrl(url)}</span>
                 </a>
             ))}
         </div>
@@ -178,22 +205,16 @@ export default function SummaryPage() {
     const init = async () => {
         setAuthChecking(true)
         const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) { 
-            router.replace('/login')
-            return 
-        }
+        if (!user) { router.replace('/login'); return }
 
         const email = user.email || ''
         setCurrentUserEmail(email)
-        
         const isTraknus = email.endsWith('@traknus.co.id')
         const isSuperAdmin = email === 'dyentadwian@gmail.com' 
         setIsAdmin(isTraknus || isSuperAdmin)
 
         const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
         setCurrentUserName(profile?.full_name || email.split('@')[0])
-
         setAuthChecking(false)
         fetchIssues()
     }
@@ -201,119 +222,63 @@ export default function SummaryPage() {
   }, []) 
 
   // ==========================================
-  //      REALTIME LISTENER (FULL FITUR)
+  //      REALTIME LISTENER (OPTIMIZED)
   // ==========================================
   useEffect(() => {
     if (authChecking) return
 
-    // Setup Channel
     const channel = supabase
       .channel('app-global-changes')
-
-      // 1. UPDATE (Status Berubah)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'sales_issues' },
-        (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sales_issues' }, (payload) => {
           const updated = payload.new as Issue
-          
-          // Update List Table
           setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: i.profiles } : i))
-          
-          // Update Modal jika sedang terbuka
           if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
              setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
           }
-        }
-      )
-
-      // 2. INSERT (Tiket Baru Masuk)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'sales_issues' },
-        async (payload) => {
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales_issues' }, async (payload) => {
             const newRecord = payload.new as Issue
-
-            // Fetch ulang agar dapat data nama pengirim (profiles)
-            const { data: fullData, error } = await supabase
-                .from('sales_issues')
-                .select(`*, profiles (full_name, email, phone_number)`)
-                .eq('id', newRecord.id)
-                .single()
-            
-            if (fullData && !error) {
-                // Masukkan ke paling atas list
-                setIssues(prev => [fullData, ...prev])
-            }
-        }
-      )
-
-      // 3. DELETE (Tiket Dihapus)
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'sales_issues' },
-        (payload) => {
-          const deletedId = payload.old.id // ID yang dihapus
-          
-          // Hapus dari list
+            const { data: fullData } = await supabase.from('sales_issues').select(`*, profiles (full_name, email, phone_number)`).eq('id', newRecord.id).single()
+            if (fullData) setIssues(prev => [fullData, ...prev])
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sales_issues' }, (payload) => {
+          const deletedId = payload.old.id 
           setIssues(prev => prev.filter(i => i.id !== deletedId))
-
-          // Jika user sedang membuka tiket ini, tutup modalnya
+          
+          // Silent close (Tidak perlu alert yang mengagetkan)
           if (selectedIssueRef.current && selectedIssueRef.current.id === deletedId) {
              setIsChatOpen(false)
              setSelectedIssue(null)
-             alert('Tiket ini baru saja dihapus oleh Admin.')
           }
-        }
-      )
-
-      // 4. CHAT BARU
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'issue_comments' },
-        (payload) => {
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'issue_comments' }, (payload) => {
           const newComment = payload.new as Comment
-          const currentOpenIssue = selectedIssueRef.current
-          
-          // Jika chat masuk untuk tiket yang sedang dibuka
-          if (currentOpenIssue && currentOpenIssue.id === newComment.issue_id) {
+          if (selectedIssueRef.current && selectedIssueRef.current.id === newComment.issue_id) {
              setComments(prev => {
                 if (prev.some(c => c.id === newComment.id)) return prev
                 setTimeout(scrollToBottom, 100)
                 return [...prev, newComment]
              })
           }
-        }
-      )
-      .subscribe() // Subscribe bersih tanpa console log status
+      })
+      .subscribe()
 
-    // Cleanup saat pindah halaman
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [supabase, authChecking])
-
 
   // --- ACTIONS ---
 
   const refreshComments = async (id: number) => {
-    const { data } = await supabase
-      .from('issue_comments')
-      .select('*')
-      .eq('issue_id', id)
-      .order('created_at', { ascending: true })
-    
+    const { data } = await supabase.from('issue_comments').select('*').eq('issue_id', id).order('created_at', { ascending: true })
     if (data) setComments(data)
     setTimeout(scrollToBottom, 100)
   }
 
   const updateStatus = async (id: number, status: string, extraFields: any = {}) => {
       const { error } = await supabase.from('sales_issues').update({ status, ...extraFields }).eq('id', id)
-      if (error) {
-          alert('Gagal update status: ' + error.message)
-          return
-      }
-      // Optimistic update (sebenarnya akan terupdate via Realtime juga, tapi ini untuk respon instan UI)
+      if (error) { alert('Gagal update status: ' + error.message); return }
+      
+      // Optimistic update
       setIssues(prev => prev.map(i => i.id === id ? { ...i, status, ...extraFields } : i))
       setSelectedIssue(prev => prev ? { ...prev, status, ...extraFields } : null)
   }
@@ -321,91 +286,50 @@ export default function SummaryPage() {
   const sendSystemMessage = async (msg: string) => {
       if(!selectedIssue) return
       await supabase.from('issue_comments').insert({
-          issue_id: selectedIssue.id,
-          message: msg,
-          sender_name: 'System',
-          is_admin: true
+          issue_id: selectedIssue.id, message: msg, sender_name: 'System', is_admin: true
       })
   }
 
   const handleDelete = async (id: number) => {
-    if(!confirm('PERINGATAN: Apakah Anda yakin ingin menghapus tiket ini beserta lampirannya secara permanen?')) return
+    // Alert ini tetap PENTING karena aksi destruktif
+    if(!confirm('PERINGATAN: Yakin ingin menghapus tiket ini secara permanen?')) return
     
-    // 1. Cari data tiket yang mau dihapus untuk cek attachment
     const issueToDelete = issues.find(i => i.id === id)
     if (!issueToDelete) return
 
-    setLoading(true) // Opsional: Beri indikasi loading agar user tidak klik 2x
-
+    setLoading(true) 
     try {
-        // 2. LOGIC BARU: Hapus File di Storage (Support Single & Multiple Files)
         if (issueToDelete.attachment_url) {
             let filePaths: string[] = []
-
-            // A. Parsing URL (Cek apakah JSON Array atau String biasa)
             try {
                 const parsed = JSON.parse(issueToDelete.attachment_url)
-                if (Array.isArray(parsed)) {
-                    filePaths = parsed // Jika array ["url1", "url2"]
-                } else {
-                    filePaths = [issueToDelete.attachment_url] // Jika string "url1"
-                }
-            } catch (e) {
-                // Jika error parse (bukan JSON), anggap string URL biasa
-                filePaths = [issueToDelete.attachment_url]
-            }
+                filePaths = Array.isArray(parsed) ? parsed : [issueToDelete.attachment_url]
+            } catch (e) { filePaths = [issueToDelete.attachment_url] }
 
-            // B. Ekstrak "Path File" yang benar dari URL Lengkap
-            // URL Supabase: https://xyz.supabase.co/.../public/issue-attachments/folder/file.jpg
-            // Kita butuh: folder/file.jpg
             const bucketName = 'issue-attachments'
-            
             const filesToRemove = filePaths.map(url => {
                 try {
                     const decodedUrl = decodeURIComponent(url)
-                    // Cari posisi nama bucket di URL
                     const splitKey = `/public/${bucketName}/`
                     const parts = decodedUrl.split(splitKey)
-                    
-                    if (parts.length > 1) {
-                        return parts[1] // Mengambil path setelah bucket name
-                    } else {
-                        // Fallback: Jika struktur URL beda, coba ambil nama file saja (cara lama)
-                        return decodedUrl.split('/').pop() 
-                    }
-                } catch {
-                    return null
-                }
-            }).filter(path => path !== undefined && path !== null) as string[]
+                    return parts.length > 1 ? parts[1] : decodedUrl.split('/').pop() 
+                } catch { return null }
+            }).filter(p => p) as string[]
 
-            // C. Eksekusi Hapus dari Storage
             if (filesToRemove.length > 0) {
-                const { error: storageError } = await supabase.storage
-                    .from(bucketName)
-                    .remove(filesToRemove) // remove() menerima array string ['path1', 'path2']
-                
-                if (storageError) {
-                    console.error('Gagal hapus file fisik:', storageError.message)
-                    // Kita tidak throw error di sini agar penghapusan data DB tetap lanjut
-                    // meskipun file gagal dihapus (misal file sudah hilang duluan)
-                }
+                await supabase.storage.from(bucketName).remove(filesToRemove)
             }
         }
 
-        // 3. Hapus Data di Tabel Database
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
 
-        // 4. Update tampilan (Hapus dari state lokal)
         setIssues(prev => prev.filter(item => item.id !== id))
-        
-        // Tutup modal chat jika tiket yang dihapus sedang dibuka
         if (selectedIssue?.id === id) {
             setIsChatOpen(false)
             setSelectedIssue(null)
         }
-
-        alert('Data dan lampiran berhasil dihapus.')
+        // ALERT SUKSES DIHAPUS -> Biar UX lebih cepat (User lihat list berkurang sendiri)
 
     } catch (err: any) { 
         alert('Gagal hapus: ' + err.message) 
@@ -429,44 +353,34 @@ export default function SummaryPage() {
       setSending(true)
       try {
           const { error } = await supabase.from('issue_comments').insert({
-              issue_id: selectedIssue.id,
-              message: newMessage,
-              sender_name: currentUserName,
-              is_admin: isAdmin
+              issue_id: selectedIssue.id, message: newMessage, sender_name: currentUserName, is_admin: isAdmin
           })
-          
           if(error) throw error
 
-          // Logic Auto Status: Jika Admin balas tiket OPEN -> In Progress
           if (isAdmin && selectedIssue.status === 'Open') {
               const now = new Date().toISOString()
               const extraFields = !selectedIssue.first_response_at 
                 ? { first_response_at: now, admin_name: currentUserName } 
                 : { admin_name: currentUserName }
-                
               await updateStatus(selectedIssue.id, 'In Progress', extraFields)
           }
-
           setNewMessage('')
-      } catch (err: any) {
-          alert('Gagal kirim: ' + err.message)
-      } finally {
-          setSending(false)
-      }
+      } catch (err: any) { alert('Gagal kirim: ' + err.message) } 
+      finally { setSending(false) }
   }
 
-  // --- LOGIC KONFIRMASI STATUS ---
+  // --- LOGIC STATUS ---
 
   const handleAdminProposeResolve = async () => {
       if(!selectedIssue) return
-      if(!confirm('Tandai pekerjaan selesai? Status akan menjadi "Waiting Confirmation".')) return
-      
+      // Confirm dihapus: Admin cukup klik tombol, kalau salah klik bisa dibatalkan manual via update status
       await updateStatus(selectedIssue.id, 'Waiting Confirmation', { admin_name: currentUserName })
       await sendSystemMessage('Admin menandai pekerjaan selesai. Menunggu konfirmasi user.')
   }
 
   const handleUserConfirmClose = async () => {
       if(!selectedIssue) return
+      // Confirm tetap ADA: Karena menutup tiket sifatnya final bagi user
       if(!confirm('Anda yakin masalah sudah tuntas? Tiket akan ditutup.')) return
       
       const now = new Date().toISOString()
@@ -476,7 +390,7 @@ export default function SummaryPage() {
 
   const handleUserReject = async () => {
       if(!selectedIssue) return
-      const reason = prompt('Apa yang masih belum sesuai?')
+      const reason = prompt('Apa yang masih belum sesuai?') // Prompt tetap ada untuk input alasan
       if(!reason) return
 
       await updateStatus(selectedIssue.id, 'In Progress', { resolved_at: null }) 
@@ -490,10 +404,16 @@ export default function SummaryPage() {
         const matchSearch = item.customer_name?.toLowerCase().includes(s) || 
                             item.profiles?.full_name?.toLowerCase().includes(s) ||
                             item.unit_number?.toLowerCase().includes(s)
+        
         const matchStatus = filterStatus === 'All' || item.status === filterStatus
-        return matchSearch && matchStatus
+        let matchGroup = false
+        if (filterGroup === 'All') matchGroup = true
+        else if (filterGroup === 'NO_GROUP') matchGroup = !item.cust_group 
+        else matchGroup = item.cust_group === filterGroup
+
+        return matchSearch && matchStatus && matchGroup
     })
-  }, [issues, searchTerm, filterStatus])
+  }, [issues, searchTerm, filterStatus, filterGroup])
 
   const getStatusColor = (st: string) => {
     if (st === 'Closed') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -544,16 +464,19 @@ export default function SummaryPage() {
 
         {/* Filters */}
         <div className="flex gap-4 mb-4">
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                 <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm dark:text-white dark:border-slate-700"/>
             </div>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700">
+            <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="All">Semua Group</option>
+                {availableGroups.map(group => (
+                    <option key={group} value={group}>{group === 'NO_GROUP' ? 'Tanpa Group' : group}</option>
+                ))}
+            </select>
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
                 <option value="All">Semua Status</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Waiting Confirmation">Waiting Confirmation</option>
-                <option value="Closed">Closed</option>
+                {availableStatuses.map(st => <option key={st} value={st}>{st}</option>)}
             </select>
         </div>
 
