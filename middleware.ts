@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
         setAll(cookiesToSet) {
           // 1. Update cookie di Request (agar Server Component bisa baca langsung)
           cookiesToSet.forEach(({ name, value, options }) => 
-            request.cookies.set(name, value)
+            response.cookies.set(name, value, options)
           )
           
           // 2. Refresh object Response agar membawa cookie baru
