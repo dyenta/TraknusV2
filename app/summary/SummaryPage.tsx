@@ -328,20 +328,44 @@ export default function SummaryPage() {
       })
   }
 
-  const handleDelete = async (id: number) => {
-    if(!confirm('Hapus tiket ini beserta riwayat chatnya?')) return
+const handleDelete = async (id: number) => {
+    if(!confirm('PERINGATAN: Apakah Anda yakin ingin menghapus tiket ini beserta lampirannya secara permanen?')) return
+    
+    // 1. Cari data tiket yang mau dihapus untuk cek attachment
+    const issueToDelete = issues.find(i => i.id === id)
+    if (!issueToDelete) return
+
     try {
+        // 2. Hapus File di Storage (Jika ada)
+        if (issueToDelete.attachment_url) {
+            // Ambil nama file dari URL
+            // Contoh URL: .../issue-attachments/1709...jpg
+            // Kita butuh bagian akhir (nama file)-nya saja
+            const fileName = issueToDelete.attachment_url.split('/').pop()
+            
+            if (fileName) {
+                const { error: storageError } = await supabase.storage
+                    .from('issue-attachments') // Nama Bucket
+                    .remove([fileName])      // Hapus file berdasarkan nama
+                
+                if (storageError) {
+                    console.error('Gagal hapus file:', storageError.message)
+                    // Kita lanjut saja biar database tetap terhapus, meski file gagal
+                }
+            }
+        }
+
+        // 3. Hapus Data di Tabel Database
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
-        // Item akan hilang otomatis dari UI via Realtime Listener (DELETE event)
-    } catch (err: any) { alert('Gagal hapus: ' + err.message) }
-  }
 
-  const handleOpenChat = async (issue: Issue) => {
-      setSelectedIssue(issue)
-      setIsChatOpen(true)
-      setComments([]) 
-      refreshComments(issue.id)
+        // 4. Update tampilan (Hapus dari state lokal)
+        setIssues(prev => prev.filter(item => item.id !== id))
+        alert('Data dan lampiran berhasil dihapus.')
+
+    } catch (err: any) { 
+        alert('Gagal hapus: ' + err.message) 
+    }
   }
 
   const handleSendMessage = async (e?: React.FormEvent) => {
