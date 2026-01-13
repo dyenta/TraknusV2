@@ -5,13 +5,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* OVERRIDE DARK MODE DEFAULT:
-   Baris di bawah ini memaksa Tailwind v4 untuk menyalakan mode gelap 
-   HANYA jika ada class 'dark' di tag <html> (bukan dari settingan laptop).
+/* Tailwind v4 Custom Variant untuk Dark Mode.
+  Ini menggantikan konfigurasi "darkMode: class" di tailwind.config.js lama.
 */
 @variant dark (&:where(.dark, .dark *));
 
-/* Styling Dasar Body agar transisi warna halus */
+/* Styling Dasar Body */
 body {
   @apply bg-slate-50 text-slate-900 transition-colors duration-300;
 }
@@ -22,78 +21,67 @@ body {
 }
 
 @layer utilities {
-  /* Tampilan Autofill Default (Light Mode) - Background Putih, Teks Hitam */
+  /* =========================================
+     AUTOFILL STYLING
+     ========================================= */
   input:-webkit-autofill,
   input:-webkit-autofill:hover, 
   input:-webkit-autofill:focus, 
-  input:-webkit-autofill:active{
+  input:-webkit-autofill:active {
       -webkit-box-shadow: 0 0 0 30px white inset !important;
-      -webkit-text-fill-color: #1e293b !important; /* slate-800 */
+      -webkit-text-fill-color: #1e293b !important;
       transition: background-color 5000s ease-in-out 0s;
   }
 
-  /* Tampilan Autofill DARK MODE - Background Slate-950, Teks Putih */
   .dark input:-webkit-autofill,
   .dark input:-webkit-autofill:hover, 
   .dark input:-webkit-autofill:focus, 
-  .dark input:-webkit-autofill:active{
-      /* Menggunakan hex code dari bg-slate-950 (#020617) */
+  .dark input:-webkit-autofill:active {
       -webkit-box-shadow: 0 0 0 30px #020617 inset !important;
-      /* Menggunakan hex code dari text-slate-100 (#f1f5f9) */
       -webkit-text-fill-color: #f1f5f9 !important;
       caret-color: #f1f5f9;
   }
-}
 
-@layer utilities {
   /* =========================================
-     CUSTOM SCROLLBAR (Chrome, Edge, Safari)
+     CUSTOM SCROLLBAR
      ========================================= */
-     
-  /* Ukuran Scrollbar (Lebar utk vertikal, Tinggi utk horizontal) */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
 
-  /* --- LIGHT MODE (Default) --- */
-  /* Jalur (Track) background */
+  /* Light Mode Scrollbar */
   ::-webkit-scrollbar-track {
-    background: #f1f5f9; /* slate-100 */
+    background: #f1f5f9;
   }
-  /* Batang (Thumb) */
   ::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1; /* slate-300 */
-    border-radius: 9999px;     /* Rounded penuh */
-    border: 2px solid #f1f5f9; /* Border agar terlihat ada jarak (padding) */
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid #f1f5f9;
   }
-  /* Saat di-hover */
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #94a3b8; /* slate-400 */
+    background-color: #94a3b8;
   }
 
-  /* --- DARK MODE --- */
-  /* Override warna saat class .dark aktif */
+  /* Dark Mode Scrollbar */
   .dark ::-webkit-scrollbar-track {
-    background: #020617; /* slate-950 (Sama dengan background aplikasi) */
+    background: #020617;
   }
   .dark ::-webkit-scrollbar-thumb {
-    background-color: #334155; /* slate-700 */
-    border: 2px solid #020617; /* Border sama dengan track gelap */
+    background-color: #334155;
+    border: 2px solid #020617;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    background-color: #475569; /* slate-600 */
+    background-color: #475569;
   }
 
-  /* =========================================
-     FIREFOX SUPPORT
-     ========================================= */
+  /* Firefox Support */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9; /* Thumb Track */
+    scrollbar-color: #cbd5e1 #f1f5f9;
   }
   
   .dark * {
-    scrollbar-color: #334155 #020617; /* Thumb Track (Dark) */
+    scrollbar-color: #334155 #020617;
   }
 }

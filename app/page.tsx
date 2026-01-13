@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 // Tambahkan ChevronDown untuk indikator dropdown
 import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown } from 'lucide-react'
@@ -68,15 +68,6 @@ export default function MenuPage() {
       case 'dark': return <Moon size={14} />
       case 'system': return <Laptop size={14} />
       default: return <Sun size={14} />
-    }
-  }
-
-  const getThemeLabel = (t: string) => {
-    switch (t) {
-      case 'light': return 'Terang'
-      case 'dark': return 'Gelap'
-      case 'system': return 'Sistem'
-      default: return 'Tema'
     }
   }
 

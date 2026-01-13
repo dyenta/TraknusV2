@@ -4,8 +4,8 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { 
-  ArrowLeft, Search, Trash2, LayoutList, Loader2, User, 
-  X, Send, Mail, Phone, Users, Hash, Paperclip, ExternalLink, 
+  ArrowLeft, Search, Trash2, Loader2, User, 
+  X, Send, Mail, Phone, Hash, Paperclip, 
   MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle,
   Sun, Moon, Laptop, ChevronDown
 } from 'lucide-react'

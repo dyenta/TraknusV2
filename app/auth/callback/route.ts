@@ -1,51 +1,61 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { type NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  // 'next' digunakan untuk redirect user ke halaman tujuan awal setelah login
   const next = searchParams.get('next') ?? '/'
 
   if (code) {
-    const cookieStore = {
-      get(name: string) { return null }, // Hanya butuh setter untuk route handler
-      set(name: string, value: string, options: CookieOptions) {},
-      remove(name: string, options: CookieOptions) {},
-    }
-    
-    // Kita buat client khusus yang bisa manipulasi cookie response
+    const cookieStore = await cookies()
+
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-        {
-          cookies: {
-            get(name: string) {
-              return request.headers.get('cookie')?.match(new RegExp(`(^| )${name}=([^;]+)`))?.[2]
-            },
-            set(name: string, value: string, options: CookieOptions) {
-               // Mekanisme cookie di Route Handler Next.js agak tricky,
-               // tapi @supabase/ssr menangani ini via parameter di bawah
-            },
-            remove(name: string, options: CookieOptions) {},
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!, // Pastikan nama variabel env sesuai
+      {
+        cookies: {
+          // Adapter untuk membaca semua cookies
+          getAll() {
+            return cookieStore.getAll()
           },
-        }
-      )
-      
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
-      
-      if (!error) {
-        // PENTING: Lakukan redirect dengan NextResponse agar cookie tersimpan
-        const response = NextResponse.redirect(`${origin}${next}`)
-        
-        // Kita perlu "mengoper" cookie dari supabase client ke response browser
-        const { cookies } = await import('next/headers') // Workaround standard nextjs 
-        // Namun cara termudah di route handler adalah membiarkan supabase/ssr bekerja di middleware.
-        // Tapi untuk route handler murni, kita bisa langsung redirect jika middleware sudah setup benar.
-        
-        return response
+          // Adapter untuk menulis cookies (Login session disimpan di sini)
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Error ini biasanya aman diabaikan di Route Handler (terjadi jika dipanggil dari Server Component murni)
+            }
+          },
+        },
       }
+    )
+
+    // Menukar Auth Code dengan Session Token
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error) {
+      // Login Sukses: Redirect ke halaman tujuan
+      // forward user to target page
+      const forwardedHost = request.headers.get('x-forwarded-host') // Penting jika pakai proxy/Vercel
+      const isLocalEnv = process.env.NODE_ENV === 'development'
+
+      if (isLocalEnv) {
+        // Localhost
+        return NextResponse.redirect(`${origin}${next}`)
+      } else if (forwardedHost) {
+        // Production (Vercel/Cloud)
+        return NextResponse.redirect(`https://${forwardedHost}${next}`)
+      } else {
+        // Fallback
+        return NextResponse.redirect(`${origin}${next}`)
+      }
+    }
   }
 
-  // Jika error, kembalikan ke login
+  // Jika error atau code tidak valid, kembalikan ke login dengan pesan error
   return NextResponse.redirect(`${origin}/login?error=auth-code-error`)
 }

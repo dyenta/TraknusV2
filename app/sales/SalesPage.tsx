@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
-  LayoutGrid, RefreshCw, Filter, MinusSquare, PlusSquare, 
+  RefreshCw, Filter, MinusSquare, PlusSquare, 
   Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, 
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, 
   Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList 

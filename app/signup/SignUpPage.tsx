@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
 // 1. Update import icons: Tambahkan User dan Phone
-import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, User, Phone } from 'lucide-react'
+import { Mail, Lock, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, User, Phone } from 'lucide-react'
 
 export default function SignUpPage() {
   // 2. Tambahkan state baru
