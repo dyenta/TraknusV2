@@ -870,15 +870,18 @@ export default function SalesPage() {
                  <MultiSelect label="Bulan" rawOptions={filterOptions.months} selectedValues={selectedMonths} onChange={setSelectedMonths} />
                  <MultiSelect label="Area" options={filterOptions.areas} selectedValues={selectedAreas} onChange={setSelectedAreas} />
                  <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
-                 <MultiSelect label="PSS" options={filterOptions.pss} selectedValues={selectedPSS} onChange={setSelectedPSS} />
              </div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />
                  <MultiSelect label="Customer Group" options={filterOptions.customerGroups} selectedValues={selectedCustomerGroups} onChange={setSelectedCustomerGroups} />
                  <MultiSelect label="Customer Name" options={filterOptions.customerNames} selectedValues={selectedCustomerNames} onChange={setSelectedCustomerNames} />
+                 <MultiSelect label="PSS" options={filterOptions.pss} selectedValues={selectedPSS} onChange={setSelectedPSS} />
+             </div>
+             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
+                 <MultiSelect label="Material Desc" options={filterOptions.materialDescriptions} selectedValues={selectedMaterialDescriptions} onChange={setSelectedMaterialDescriptions} />
                  <MultiSelect label="Material" options={filterOptions.materials} selectedValues={selectedMaterials} onChange={setSelectedMaterials} />
-                  <MultiSelect label="Material Desc" options={filterOptions.materialDescriptions} selectedValues={selectedMaterialDescriptions} onChange={setSelectedMaterialDescriptions} />
+
              </div>
           </div>
         </div>
