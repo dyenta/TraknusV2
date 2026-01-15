@@ -26,6 +26,8 @@ export interface AggregatedRecord {
   col_label_2: string;
   col_label_3: string;
   col_label_4: string;
+  col_label_5: string;
+  col_label_6: string;
   total_amount: number;
 }
 
@@ -37,7 +39,7 @@ export interface PivotNode {
   values: Record<string, number>;
   rowTotal: number;
   children?: PivotNode[];
-  childMap?: Record<string, PivotNode>; // Added for cleaner typing
+  childMap?: Record<string, PivotNode>;
 }
 
 export const HIERARCHY_OPTIONS = [
@@ -48,6 +50,7 @@ export const HIERARCHY_OPTIONS = [
   { label: 'Customer Group', value: 'cust_group' },
   { label: 'Customer Name', value: 'cust_name' },
   { label: 'Product', value: 'product' },
+  { label: 'Material', value: 'material' }, // [GANTI] Value harus 'material' sesuai SQL
   { label: 'Area', value: 'area' }
 ]
 
@@ -538,11 +541,11 @@ export default function SalesPage() {
   const [filterOptions, setFilterOptions] = useState<{
     years: any[], months: any[], areas: any[], businessAreas: any[], 
     pss: any[], keyAccountTypes: any[], products: any[], 
-    customerGroups: any[], customerNames: any[]
+    customerGroups: any[], customerNames: any[], materials: any[] // [GANTI] nama state options
   }>({
     years: [], months: [], areas: [], businessAreas: [], 
     pss: [], keyAccountTypes: [], products: [], 
-    customerGroups: [], customerNames: []
+    customerGroups: [], customerNames: [], materials: [] 
   });
 
   // FILTERS
@@ -555,12 +558,15 @@ export default function SalesPage() {
   const [selectedCustomerGroups, setSelectedCustomerGroups] = useState(['All']);
   const [selectedProducts, setSelectedProducts] = useState(['All']);
   const [selectedCustomerNames, setSelectedCustomerNames] = useState(['All']);
+  const [selectedMaterials, setSelectedMaterials] = useState(['All']); // [GANTI] nama state
 
   // VIEW STATE
   const [level1Field, setLevel1Field] = useState('business_area');
   const [level2Field, setLevel2Field] = useState('');
   const [level3Field, setLevel3Field] = useState('');
   const [level4Field, setLevel4Field] = useState('');
+  const [level5Field, setLevel5Field] = useState('');
+  const [level6Field, setLevel6Field] = useState('');
   
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({});
@@ -570,8 +576,8 @@ export default function SalesPage() {
   const isDarkMode = isMounted && (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
   
   const activeHierarchyLevels = useMemo(() => 
-    [level1Field, level2Field, level3Field, level4Field].filter(l => l !== ''), 
-    [level1Field, level2Field, level3Field, level4Field]
+    [level1Field, level2Field, level3Field, level4Field, level5Field, level6Field].filter(l => l !== ''),
+    [level1Field, level2Field, level3Field, level4Field, level5Field, level6Field]
   );
 
   const { pivotData, visibleRows, getHeaderInfo } = usePivotTableData({ 
@@ -655,6 +661,7 @@ export default function SalesPage() {
 
     const getSingleFilter = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr[0];
     
+    // [GANTI] Menggunakan p_material (Bukan p_material_description)
     const optionsRpcArgs = { 
       p_year: getSingleFilter(selectedYears), 
       p_month: getSingleFilter(selectedMonths), 
@@ -664,14 +671,18 @@ export default function SalesPage() {
       p_kat: getSingleFilter(selectedKeyAccountTypes), 
       p_cust_group: getSingleFilter(selectedCustomerGroups), 
       p_product: getSingleFilter(selectedProducts), 
-      p_cust_name: getSingleFilter(selectedCustomerNames) 
+      p_cust_name: getSingleFilter(selectedCustomerNames),
+      p_material: getSingleFilter(selectedMaterials) // [GANTI]
     };
     
+    // [GANTI] Menggunakan filter_materials (Bukan filter_material_descriptions)
     const analyticsRpcArgs = { 
       lvl1_field: level1Field, 
       lvl2_field: level2Field, 
       lvl3_field: level3Field, 
       lvl4_field: level4Field, 
+      lvl5_field: level5Field,
+      lvl6_field: level6Field,
       filter_years: selectedYears, 
       filter_areas: selectedAreas, 
       filter_months: selectedMonths.includes('All') ? [] : selectedMonths.map(m => parseInt(m)), 
@@ -680,14 +691,15 @@ export default function SalesPage() {
       filter_key_account_types: selectedKeyAccountTypes, 
       filter_cust_groups: selectedCustomerGroups, 
       filter_products: selectedProducts,
-      filter_cust_names: selectedCustomerNames 
+      filter_cust_names: selectedCustomerNames,
+      filter_materials: selectedMaterials // [GANTI]
     };
 
     try {
       const [optionsRes, dataRes, chartRes] = await Promise.all([ 
           supabase.rpc('get_dynamic_filter_options', optionsRpcArgs), 
           supabase.rpc('get_sales_analytics', analyticsRpcArgs), 
-          supabase.rpc('get_sales_analytics', { ...analyticsRpcArgs, lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'' }) 
+          supabase.rpc('get_sales_analytics', { ...analyticsRpcArgs, lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'', lvl5_field:'', lvl6_field:'' }) 
       ]);
       
       if (optionsRes.data) {
@@ -700,7 +712,8 @@ export default function SalesPage() {
           keyAccountTypes: optionsRes.data.key_account_type, 
           products: optionsRes.data.product, 
           customerGroups: optionsRes.data.cust_group, 
-          customerNames: optionsRes.data.cust_name 
+          customerNames: optionsRes.data.cust_name,
+          materials: optionsRes.data.material // [GANTI] data.material
         });
       }
       
@@ -715,15 +728,16 @@ export default function SalesPage() {
   }, [
     selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas, 
     selectedPSS, selectedKeyAccountTypes, selectedCustomerGroups, 
-    selectedProducts, selectedCustomerNames, level1Field, level2Field, 
-    level3Field, level4Field, supabase, isAuthChecking
+    selectedProducts, selectedCustomerNames, selectedMaterials, // [GANTI]
+    level1Field, level2Field, level3Field, level4Field, level5Field, level6Field,
+    supabase, isAuthChecking
   ]);
 
   useEffect(() => { 
     if (!isAuthChecking) fetchAnalyticsData(); 
   }, [fetchAnalyticsData, isAuthChecking]); 
 
-  useEffect(() => setExpandedRows({}), [level1Field, level2Field, level3Field, level4Field]);
+  useEffect(() => setExpandedRows({}), [level1Field, level2Field, level3Field, level4Field, level5Field, level6Field]);
 
   const handleRefreshDatabase = async () => { 
     if(!confirm("Update Data dari Master?")) return; 
@@ -853,13 +867,14 @@ export default function SalesPage() {
                  <MultiSelect label="Bulan" rawOptions={filterOptions.months} selectedValues={selectedMonths} onChange={setSelectedMonths} />
                  <MultiSelect label="Area" options={filterOptions.areas} selectedValues={selectedAreas} onChange={setSelectedAreas} />
                  <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                 <MultiSelect label="PSS" options={filterOptions.pss} selectedValues={selectedPSS} onChange={setSelectedPSS} />
              </div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />
-                 <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
-                 <MultiSelect label="PSS" options={filterOptions.pss} selectedValues={selectedPSS} onChange={setSelectedPSS} />
                  <MultiSelect label="Cust Group" options={filterOptions.customerGroups} selectedValues={selectedCustomerGroups} onChange={setSelectedCustomerGroups} />
                  <MultiSelect label="Customer Name" options={filterOptions.customerNames} selectedValues={selectedCustomerNames} onChange={setSelectedCustomerNames} />
+                 <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
+                 <MultiSelect label="Material" options={filterOptions.materials} selectedValues={selectedMaterials} onChange={setSelectedMaterials} />
              </div>
           </div>
         </div>
@@ -907,11 +922,13 @@ export default function SalesPage() {
               </div>
            </div>
            
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 w-full">
              <DimensionSelectBox label="Level 1" value={level1Field} onChange={setLevel1Field} options={HIERARCHY_OPTIONS} />
              <DimensionSelectBox label="Level 2" value={level2Field} onChange={setLevel2Field} options={HIERARCHY_OPTIONS} />
              <DimensionSelectBox label="Level 3" value={level3Field} onChange={setLevel3Field} options={HIERARCHY_OPTIONS} />
              <DimensionSelectBox label="Level 4" value={level4Field} onChange={setLevel4Field} options={HIERARCHY_OPTIONS} />
+             <DimensionSelectBox label="Level 5" value={level5Field} onChange={setLevel5Field} options={HIERARCHY_OPTIONS} />
+             <DimensionSelectBox label="Level 6" value={level6Field} onChange={setLevel6Field} options={HIERARCHY_OPTIONS} />
            </div>
         </div>
 
