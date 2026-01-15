@@ -50,7 +50,8 @@ export const HIERARCHY_OPTIONS = [
   { label: 'Customer Group', value: 'cust_group' },
   { label: 'Customer Name', value: 'cust_name' },
   { label: 'Product', value: 'product' },
-  { label: 'Material', value: 'material' }, // [GANTI] Value harus 'material' sesuai SQL
+  { label: 'Material', value: 'material' },
+  { label: 'Material Description', value: 'material_description' },
   { label: 'Area', value: 'area' }
 ]
 
@@ -541,11 +542,11 @@ export default function SalesPage() {
   const [filterOptions, setFilterOptions] = useState<{
     years: any[], months: any[], areas: any[], businessAreas: any[], 
     pss: any[], keyAccountTypes: any[], products: any[], 
-    customerGroups: any[], customerNames: any[], materials: any[] // [GANTI] nama state options
+    customerGroups: any[], customerNames: any[], materials: any[], materialDescriptions: any[]
   }>({
     years: [], months: [], areas: [], businessAreas: [], 
     pss: [], keyAccountTypes: [], products: [], 
-    customerGroups: [], customerNames: [], materials: [] 
+    customerGroups: [], customerNames: [], materials: [], materialDescriptions: []
   });
 
   // FILTERS
@@ -558,7 +559,8 @@ export default function SalesPage() {
   const [selectedCustomerGroups, setSelectedCustomerGroups] = useState(['All']);
   const [selectedProducts, setSelectedProducts] = useState(['All']);
   const [selectedCustomerNames, setSelectedCustomerNames] = useState(['All']);
-  const [selectedMaterials, setSelectedMaterials] = useState(['All']); // [GANTI] nama state
+  const [selectedMaterials, setSelectedMaterials] = useState(['All']);
+  const [selectedMaterialDescriptions, setSelectedMaterialDescriptions] = useState(['All']);
 
   // VIEW STATE
   const [level1Field, setLevel1Field] = useState('business_area');
@@ -661,7 +663,6 @@ export default function SalesPage() {
 
     const getSingleFilter = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr[0];
     
-    // [GANTI] Menggunakan p_material (Bukan p_material_description)
     const optionsRpcArgs = { 
       p_year: getSingleFilter(selectedYears), 
       p_month: getSingleFilter(selectedMonths), 
@@ -672,10 +673,10 @@ export default function SalesPage() {
       p_cust_group: getSingleFilter(selectedCustomerGroups), 
       p_product: getSingleFilter(selectedProducts), 
       p_cust_name: getSingleFilter(selectedCustomerNames),
-      p_material: getSingleFilter(selectedMaterials) // [GANTI]
+      p_material: getSingleFilter(selectedMaterials),
+      p_material_description: getSingleFilter(selectedMaterialDescriptions)
     };
     
-    // [GANTI] Menggunakan filter_materials (Bukan filter_material_descriptions)
     const analyticsRpcArgs = { 
       lvl1_field: level1Field, 
       lvl2_field: level2Field, 
@@ -692,7 +693,8 @@ export default function SalesPage() {
       filter_cust_groups: selectedCustomerGroups, 
       filter_products: selectedProducts,
       filter_cust_names: selectedCustomerNames,
-      filter_materials: selectedMaterials // [GANTI]
+      filter_materials: selectedMaterials,
+      filter_material_descriptions: selectedMaterialDescriptions
     };
 
     try {
@@ -713,7 +715,8 @@ export default function SalesPage() {
           products: optionsRes.data.product, 
           customerGroups: optionsRes.data.cust_group, 
           customerNames: optionsRes.data.cust_name,
-          materials: optionsRes.data.material // [GANTI] data.material
+          materials: optionsRes.data.material,
+          materialDescriptions: optionsRes.data.material_description
         });
       }
       
@@ -728,7 +731,7 @@ export default function SalesPage() {
   }, [
     selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas, 
     selectedPSS, selectedKeyAccountTypes, selectedCustomerGroups, 
-    selectedProducts, selectedCustomerNames, selectedMaterials, // [GANTI]
+    selectedProducts, selectedCustomerNames, selectedMaterials, selectedMaterialDescriptions,
     level1Field, level2Field, level3Field, level4Field, level5Field, level6Field,
     supabase, isAuthChecking
   ]);
@@ -871,10 +874,11 @@ export default function SalesPage() {
              </div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />
-                 <MultiSelect label="Cust Group" options={filterOptions.customerGroups} selectedValues={selectedCustomerGroups} onChange={setSelectedCustomerGroups} />
+                 <MultiSelect label="Customer Group" options={filterOptions.customerGroups} selectedValues={selectedCustomerGroups} onChange={setSelectedCustomerGroups} />
                  <MultiSelect label="Customer Name" options={filterOptions.customerNames} selectedValues={selectedCustomerNames} onChange={setSelectedCustomerNames} />
                  <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
                  <MultiSelect label="Material" options={filterOptions.materials} selectedValues={selectedMaterials} onChange={setSelectedMaterials} />
+                  <MultiSelect label="Material Desc" options={filterOptions.materialDescriptions} selectedValues={selectedMaterialDescriptions} onChange={setSelectedMaterialDescriptions} />
              </div>
           </div>
         </div>
