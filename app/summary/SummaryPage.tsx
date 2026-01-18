@@ -7,7 +7,7 @@ import {
   ArrowLeft, Search, Trash2, Loader2, User, 
   X, Send, Mail, Phone, Hash, Paperclip, 
   MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle,
-  Sun, Moon, Laptop, ChevronDown
+  Sun, Moon, Laptop, ChevronDown, ShieldAlert
 } from 'lucide-react'
 import { useTheme } from '../components/ThemeProvider' 
 
@@ -58,11 +58,14 @@ export default function SummaryPage() {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   
-  // State Auth
+  // State Auth & Akses
   const [authChecking, setAuthChecking] = useState(true)
   const [currentUserEmail, setCurrentUserEmail] = useState('')
   const [currentUserName, setCurrentUserName] = useState('')
-  const [isAdmin, setIsAdmin] = useState(false)
+  
+  // [BARU] State Role-Based Access (Mirip page.tsx)
+  const [userAccess, setUserAccess] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false) // Admin = HO
 
   // State Modal Chat
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -109,7 +112,8 @@ export default function SummaryPage() {
     }
     const sts = data.map(i => i.status)
     const uniqueSt = Array.from(new Set(sts))
-    const sortOrder = ['Open', 'In Progress', 'Waiting Confirmation', 'Closed']
+    // [UPDATE] Urutan status KAPITAL
+    const sortOrder = ['OPEN', 'IN PROGRESS', 'WAITING CONFIRMATION', 'CLOSED']
     return uniqueSt.sort((a, b) => sortOrder.indexOf(a) - sortOrder.indexOf(b))
   }, [issues, filterGroup])
 
@@ -174,33 +178,48 @@ export default function SummaryPage() {
     const start = new Date(startStr).getTime()
     const end = new Date(endStr).getTime()
     const diffMs = end - start
-    if (diffMs < 0) return '0m'
+    if (diffMs < 60000) return '< 1 m'
     const minutes = Math.floor(diffMs / 60000)
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
-    if (days > 0) return `${days}hari ${hours % 24}jam`
-    if (hours > 0) return `${hours}jam ${minutes % 60}menit`
-    return `${minutes} menit`
+    if (days > 0) return `${days}h ${hours % 24}j`
+    if (hours > 0) return `${hours}j ${minutes % 60}m`
+    return `${minutes} m`
   }
 
-  // --- INITIAL DATA FETCH ---
-  const fetchIssues = useCallback(async () => {
+  // --- DATA FETCHING (UPDATED WITH ROLE LOGIC) ---
+  const fetchIssues = useCallback(async (overrideIsAdmin?: boolean, overrideEmail?: string) => {
+      // Menggunakan parameter override untuk memastikan fetch pertama menggunakan data terbaru
+      const isUserAdmin = overrideIsAdmin !== undefined ? overrideIsAdmin : isAdmin
+      const userEmail = overrideEmail || currentUserEmail
+
       try {
-        const { data, error } = await supabase
+        // [LOGIC FILTER]
+        // HO: Melihat semua.
+        // Non-HO: Join profiles!inner -> Filter berdasarkan email profile = userEmail login.
+        
+        let query = supabase
             .from('sales_issues')
-            .select(`*, profiles (full_name, email, phone_number)`)
+            .select(`*, profiles!inner (full_name, email, phone_number)`)
             .order('created_at', { ascending: false })
+
+        if (!isUserAdmin && userEmail) {
+            query = query.eq('profiles.email', userEmail)
+        }
+        
+        const { data, error } = await query
         
         if (error) throw error
-        setIssues(data || [])
+        // Casting data karena TypeScript mungkin bingung dengan struktur join
+        setIssues((data as any) || [])
         setLoading(false)
       } catch (err: any) { 
           console.error('Error:', err.message) 
           setLoading(false)
       } 
-  }, [supabase])
+  }, [supabase, isAdmin, currentUserEmail])
 
-  // --- AUTH CHECK ---
+  // --- AUTH CHECK & ROLE ASSIGNMENT ---
   useEffect(() => {
     const init = async () => {
         setAuthChecking(true)
@@ -209,43 +228,79 @@ export default function SummaryPage() {
 
         const email = user.email || ''
         setCurrentUserEmail(email)
-        const isTraknus = email.endsWith('@traknus.co.id')
-        const isSuperAdmin = email === 'dyentadwian@gmail.com' 
-        setIsAdmin(isTraknus || isSuperAdmin)
 
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('email', email).single()
-        setCurrentUserName(profile?.full_name || email.split('@')[0])
+        // [AMBIL PROFILE & AKSES] Menggantikan hardcode email
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, akses') // Mengambil kolom akses
+            .eq('email', email)
+            .single()
+
+        const fullName = profile?.full_name || email.split('@')[0]
+        setCurrentUserName(fullName)
+        
+        const userRole = profile?.akses || 'CUSTOMER' 
+        setUserAccess(userRole)
+
+        // Tentukan Admin: Hanya jika akses === 'HO'
+        const isHO = userRole === 'HO'
+        setIsAdmin(isHO)
+
         setAuthChecking(false)
-        fetchIssues()
+        
+        // Panggil fetchIssues segera dengan role yang baru didapat
+        fetchIssues(isHO, email)
     }
     init()
   }, []) 
 
   // ==========================================
-  //      REALTIME LISTENER (OPTIMIZED)
+  //      REALTIME LISTENER
   // ==========================================
   useEffect(() => {
     if (authChecking) return
 
     const channel = supabase
       .channel('app-global-changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sales_issues' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sales_issues' }, async (payload) => {
           const updated = payload.new as Issue
-          setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: i.profiles } : i))
-          if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
-             setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
-          }
+          
+          // Re-fetch single row untuk memastikan relasi profile & permission check
+          const { data: fullData } = await supabase
+            .from('sales_issues')
+            .select(`*, profiles!inner (full_name, email, phone_number)`)
+            .eq('id', updated.id)
+            .single()
+
+           if (fullData) {
+               // Logic Filter Realtime: Hanya update jika Admin (HO) atau Pemilik Tiket
+               const dataOwnerEmail = (fullData as any).profiles?.email
+               if (isAdmin || dataOwnerEmail === currentUserEmail) {
+                   setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: (fullData as any).profiles } : i))
+                   if (selectedIssueRef.current && selectedIssueRef.current.id === updated.id) {
+                        setSelectedIssue(prev => prev ? { ...prev, ...updated } : null)
+                   }
+               }
+           }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales_issues' }, async (payload) => {
             const newRecord = payload.new as Issue
-            const { data: fullData } = await supabase.from('sales_issues').select(`*, profiles (full_name, email, phone_number)`).eq('id', newRecord.id).single()
-            if (fullData) setIssues(prev => [fullData, ...prev])
+            const { data: fullData } = await supabase
+                .from('sales_issues')
+                .select(`*, profiles!inner (full_name, email, phone_number)`)
+                .eq('id', newRecord.id)
+                .single()
+            
+            if (fullData) {
+                const dataOwnerEmail = (fullData as any).profiles?.email
+                if (isAdmin || dataOwnerEmail === currentUserEmail) {
+                    setIssues(prev => [fullData as any, ...prev])
+                }
+            }
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sales_issues' }, (payload) => {
           const deletedId = payload.old.id 
           setIssues(prev => prev.filter(i => i.id !== deletedId))
-          
-          // Silent close (Tidak perlu alert yang mengagetkan)
           if (selectedIssueRef.current && selectedIssueRef.current.id === deletedId) {
              setIsChatOpen(false)
              setSelectedIssue(null)
@@ -264,7 +319,7 @@ export default function SummaryPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [supabase, authChecking])
+  }, [supabase, authChecking, isAdmin, currentUserEmail])
 
   // --- ACTIONS ---
 
@@ -278,7 +333,6 @@ export default function SummaryPage() {
       const { error } = await supabase.from('sales_issues').update({ status, ...extraFields }).eq('id', id)
       if (error) { alert('Gagal update status: ' + error.message); return }
       
-      // Optimistic update
       setIssues(prev => prev.map(i => i.id === id ? { ...i, status, ...extraFields } : i))
       setSelectedIssue(prev => prev ? { ...prev, status, ...extraFields } : null)
   }
@@ -291,7 +345,7 @@ export default function SummaryPage() {
   }
 
   const handleDelete = async (id: number) => {
-    // Alert ini tetap PENTING karena aksi destruktif
+    if(!isAdmin) return 
     if(!confirm('PERINGATAN: Yakin ingin menghapus tiket ini secara permanen?')) return
     
     const issueToDelete = issues.find(i => i.id === id)
@@ -300,6 +354,7 @@ export default function SummaryPage() {
     setLoading(true) 
     try {
         if (issueToDelete.attachment_url) {
+            // Logic hapus file storage...
             let filePaths: string[] = []
             try {
                 const parsed = JSON.parse(issueToDelete.attachment_url)
@@ -329,7 +384,6 @@ export default function SummaryPage() {
             setIsChatOpen(false)
             setSelectedIssue(null)
         }
-        // ALERT SUKSES DIHAPUS -> Biar UX lebih cepat (User lihat list berkurang sendiri)
 
     } catch (err: any) { 
         alert('Gagal hapus: ' + err.message) 
@@ -348,7 +402,8 @@ export default function SummaryPage() {
   const handleSendMessage = async (e?: React.FormEvent) => {
       e?.preventDefault()
       if (!newMessage.trim() || !selectedIssue) return
-      if (selectedIssue.status === 'Closed') return
+      // [UPDATE] Status Kapital
+      if (selectedIssue.status === 'CLOSED') return
 
       setSending(true)
       try {
@@ -357,44 +412,46 @@ export default function SummaryPage() {
           })
           if(error) throw error
 
-          if (isAdmin && selectedIssue.status === 'Open') {
+          // [UPDATE] Auto update status ke IN PROGRESS (Kapital) jika Admin merespon tiket OPEN
+          if (isAdmin && selectedIssue.status === 'OPEN') {
               const now = new Date().toISOString()
               const extraFields = !selectedIssue.first_response_at 
                 ? { first_response_at: now, admin_name: currentUserName } 
                 : { admin_name: currentUserName }
-              await updateStatus(selectedIssue.id, 'In Progress', extraFields)
+              await updateStatus(selectedIssue.id, 'IN PROGRESS', extraFields)
           }
           setNewMessage('')
       } catch (err: any) { alert('Gagal kirim: ' + err.message) } 
       finally { setSending(false) }
   }
 
-  // --- LOGIC STATUS ---
+  // --- LOGIC STATUS (UPDATE KAPITAL) ---
 
   const handleAdminProposeResolve = async () => {
       if(!selectedIssue) return
-      // Confirm dihapus: Admin cukup klik tombol, kalau salah klik bisa dibatalkan manual via update status
-      await updateStatus(selectedIssue.id, 'Waiting Confirmation', { admin_name: currentUserName })
+      // [UPDATE] WAITING CONFIRMATION
+      await updateStatus(selectedIssue.id, 'WAITING CONFIRMATION', { admin_name: currentUserName })
       await sendSystemMessage('Admin menandai pekerjaan selesai. Menunggu konfirmasi user.')
   }
 
   const handleUserConfirmClose = async () => {
       if(!selectedIssue) return
-      // Confirm tetap ADA: Karena menutup tiket sifatnya final bagi user
       if(!confirm('Anda yakin masalah sudah tuntas? Tiket akan ditutup.')) return
       
       const now = new Date().toISOString()
-      await updateStatus(selectedIssue.id, 'Closed', { resolved_at: now })
+      // [UPDATE] CLOSED
+      await updateStatus(selectedIssue.id, 'CLOSED', { resolved_at: now })
       await sendSystemMessage('User mengkonfirmasi masalah selesai. Tiket DITUTUP.')
   }
 
   const handleUserReject = async () => {
       if(!selectedIssue) return
-      const reason = prompt('Apa yang masih belum sesuai?') // Prompt tetap ada untuk input alasan
+      const reason = prompt('Apa yang masih belum sesuai?') 
       if(!reason) return
 
-      await updateStatus(selectedIssue.id, 'In Progress', { resolved_at: null }) 
-      await sendSystemMessage(`User menolak penyelesaian. Alasan: "${reason}". Status kembali ke In Progress.`)
+      // [UPDATE] IN PROGRESS
+      await updateStatus(selectedIssue.id, 'IN PROGRESS', { resolved_at: null }) 
+      await sendSystemMessage(`User menolak penyelesaian. Alasan: "${reason}". Status kembali ke IN PROGRESS.`)
   }
 
   // --- FILTERING ---
@@ -415,10 +472,12 @@ export default function SummaryPage() {
     })
   }, [issues, searchTerm, filterStatus, filterGroup])
 
+  // [UPDATE] Helper warna dengan status KAPITAL
   const getStatusColor = (st: string) => {
-    if (st === 'Closed') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-    if (st === 'Waiting Confirmation') return 'bg-amber-100 text-amber-700 border-amber-200'
-    if (st === 'In Progress') return 'bg-amber-100 text-amber-700 border-amber-200'
+    if (st === 'CLOSED') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    if (st === 'WAITING CONFIRMATION') return 'bg-amber-100 text-amber-700 border-amber-200'
+    if (st === 'IN PROGRESS') return 'bg-amber-100 text-amber-700 border-amber-200'
+    // Default OPEN
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
 
@@ -439,7 +498,9 @@ export default function SummaryPage() {
                     <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                         <img src="/favicon.ico" alt="Logo" className="w-8 h-8 rounded"/>  Summary Keluhan
                     </h1>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Data keluhan customer yang perlu ditindaklanjuti</p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Data keluhan customer yang perlu ditindaklanjuti</p>
+                    </div>
                 </div>
             </div>
 
@@ -469,13 +530,13 @@ export default function SummaryPage() {
                 <input type="text" placeholder="Cari..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-sm dark:text-white dark:border-slate-700"/>
             </div>
             <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
-                <option value="All">Semua Group</option>
+                <option value="All">SEMUA GROUP</option>
                 {availableGroups.map(group => (
                     <option key={group} value={group}>{group === 'NO_GROUP' ? 'Tanpa Group' : group}</option>
                 ))}
             </select>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-lg border text-sm dark:text-white dark:border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
-                <option value="All">Semua Status</option>
+                <option value="All">SEMUA STATUS</option>
                 {availableStatuses.map(st => <option key={st} value={st}>{st}</option>)}
             </select>
         </div>
@@ -494,41 +555,52 @@ export default function SummaryPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-slate-800">
-                        {filteredData.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                <td className="p-4 align-top">
-                                    <div className="font-bold">{new Date(item.created_at).toLocaleDateString('id-ID')}</div>
-                                    <div className="text-xs text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
-                                </td>
-                                <td className="p-4 align-top">
-                                    <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
-                                    <div className="text-xs text-slate-500 mt-1">Group: {item.cust_group || '-'}</div>
-                                    <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium"><User size={12} className="text-slate-400"/> {item.profiles?.full_name || 'Tanpa Nama'}</div>
-                                        <div className="flex items-center gap-2 text-[11px] text-slate-500"><Mail size={12} className="text-slate-400"/> {item.profiles?.email || '-'}</div>
-                                        <div className="flex items-center gap-2 text-[11px] text-slate-500"><Phone size={12} className="text-slate-400"/> {item.profiles?.phone_number || '-'}</div>
+                        {filteredData.length === 0 ? (
+                             <tr>
+                                <td colSpan={5} className="p-8 text-center text-slate-400">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <ShieldAlert size={32} className="opacity-50"/>
+                                        <span>Tidak ada data ditemukan.</span>
                                     </div>
                                 </td>
-                                <td className="p-4 align-top">
-                                    <div className="text-[10px] font-bold uppercase text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-1">{item.issue_type} | Unit: {item.unit_number}</div>
-                                    <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word">{item.description}</div>
-                                    {renderAttachments(item.attachment_url)}
-                                    {isAdmin && (
-                                        <div className="mt-3 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-[10px]">
-                                            <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><Timer size={10}/> Respon Awal</span>{item.first_response_at ? <span className="font-mono font-bold text-amber-500 dark:text-amber-400">{calculateDuration(item.created_at, item.first_response_at)}</span> : <span className="text-slate-400 italic">Belum di Respon</span>}</div>
-                                            <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><CheckCircle2 size={10}/> Total Durasi</span>{item.resolved_at ? <span className="font-mono font-bold text-emerald-500 dark:text-emerald-400">{calculateDuration(item.created_at, item.resolved_at)}</span> : <span className="text-slate-400 italic">Belum selesai</span>}</div>
+                             </tr>
+                        ) : (
+                            filteredData.map((item) => (
+                                <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                    <td className="p-4 align-top">
+                                        <div className="font-bold">{new Date(item.created_at).toLocaleDateString('id-ID')}</div>
+                                        <div className="text-xs text-slate-400">{new Date(item.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
+                                    </td>
+                                    <td className="p-4 align-top">
+                                        <div className="font-bold text-slate-800 dark:text-slate-100">{item.customer_name}</div>
+                                        <div className="text-xs text-slate-500 mt-1">Group: {item.cust_group || '-'}</div>
+                                        <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium"><User size={12} className="text-slate-400"/> {item.profiles?.full_name || 'Tanpa Nama'}</div>
+                                            <div className="flex items-center gap-2 text-[11px] text-slate-500"><Mail size={12} className="text-slate-400"/> {item.profiles?.email || '-'}</div>
+                                            <div className="flex items-center gap-2 text-[11px] text-slate-500"><Phone size={12} className="text-slate-400"/> {item.profiles?.phone_number || '-'}</div>
                                         </div>
-                                    )}
-                                </td>
-                                <td className="p-4 align-top">
-                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${getStatusColor(item.status)}`}>{item.status}</span>
-                                </td>
-                                <td className="p-4 align-top text-center space-y-2">
-                                    <button onClick={() => handleOpenChat(item)} className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"><MessageSquare size={14}/> Chat / Respon</button>
-                                    {isAdmin && (<button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1" title="Hapus"><Trash2 size={16}/></button>)}
-                                </td>
-                            </tr>
-                        ))}
+                                    </td>
+                                    <td className="p-4 align-top">
+                                        <div className="text-[10px] font-bold uppercase text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-1">{item.issue_type} | Unit: {item.unit_number}</div>
+                                        <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-normal wrap-break-word">{item.description}</div>
+                                        {renderAttachments(item.attachment_url)}
+                                        {isAdmin && (
+                                            <div className="mt-3 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-[10px]">
+                                                <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><Timer size={10}/> Respon Awal</span>{item.first_response_at ? <span className="font-mono font-bold text-amber-500 dark:text-amber-400">{calculateDuration(item.created_at, item.first_response_at)}</span> : <span className="text-slate-400 italic">Belum di Respon</span>}</div>
+                                                <div className="flex flex-col"><span className="text-slate-400 flex items-center gap-1 mb-0.5"><CheckCircle2 size={10}/> Total Durasi</span>{item.resolved_at ? <span className="font-mono font-bold text-emerald-500 dark:text-emerald-400">{calculateDuration(item.created_at, item.resolved_at)}</span> : <span className="text-slate-400 italic">Belum selesai</span>}</div>
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="p-4 align-top">
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${getStatusColor(item.status)}`}>{item.status}</span>
+                                    </td>
+                                    <td className="p-4 align-top text-center space-y-2">
+                                        <button onClick={() => handleOpenChat(item)} className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"><MessageSquare size={14}/> Chat / Respon</button>
+                                        {isAdmin && (<button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 transition-colors pt-1" title="Hapus"><Trash2 size={16}/></button>)}
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -580,17 +652,19 @@ export default function SummaryPage() {
                     </div>
 
                     <div className="p-3 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shrink-0">
-                        {selectedIssue.status !== 'Closed' && (
+                        {/* [UPDATE] CLOSED */}
+                        {selectedIssue.status !== 'CLOSED' && (
                             <form onSubmit={handleSendMessage} className="flex gap-2 mb-3">
                                 <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Tulis balasan..." className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"/>
                                 <button type="submit" disabled={sending || !newMessage.trim()} className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all">{sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}</button>
                             </form>
                         )}
                         <div className="flex items-center justify-end border-t border-slate-100 dark:border-slate-800 pt-2">
-                            {isAdmin && selectedIssue.status !== 'Closed' && selectedIssue.status !== 'Waiting Confirmation' && (
+                            {/* [UPDATE] WAITING CONFIRMATION & CLOSED */}
+                            {isAdmin && selectedIssue.status !== 'CLOSED' && selectedIssue.status !== 'WAITING CONFIRMATION' && (
                                 <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><CheckCircle size={14}/> Ajukan Selesai</button>
                             )}
-                            {selectedIssue.status === 'Waiting Confirmation' && (
+                            {selectedIssue.status === 'WAITING CONFIRMATION' && (
                                 <>
                                     {currentUserEmail === selectedIssue.profiles?.email ? (
                                         <div className="flex gap-2">
@@ -602,7 +676,7 @@ export default function SummaryPage() {
                                     )}
                                 </>
                             )}
-                            {selectedIssue.status === 'Closed' && (<span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={14}/> Tiket Ditutup</span>)}
+                            {selectedIssue.status === 'CLOSED' && (<span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={14}/> Tiket Ditutup</span>)}
                         </div>
                     </div>
                 </div>
