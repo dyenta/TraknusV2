@@ -6,8 +6,8 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Save, UploadCloud, FileSpreadsheet, Loader2, 
-  AlertCircle, Terminal, FileType, Database, Sun, Moon, Laptop,
-  CheckCircle2, ChevronDown, RotateCcw
+  AlertCircle, Terminal, FileType, Sun, Moon, Laptop,
+  CheckCircle2, ChevronDown, RotateCcw, FileDown // Added FileDown
 } from 'lucide-react'
 import { useTheme } from '../components/ThemeProvider'
 
@@ -15,7 +15,7 @@ export default function ImportDataPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   
-  // State untuk Dropdown Tema (Sesuai SalesIssuesPage)
+  // State untuk Dropdown Tema
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const supabase = useMemo(() => createBrowserClient(
@@ -26,7 +26,7 @@ export default function ImportDataPage() {
   // --- STATE ---
   const [file, setFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [isComplete, setIsComplete] = useState(false) // State baru untuk menandai selesai
+  const [isComplete, setIsComplete] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [progress, setProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
@@ -83,6 +83,76 @@ export default function ImportDataPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  // --- DOWNLOAD TEMPLATE FUNCTION ---
+  const handleDownloadTemplate = () => {
+    // Data dummy sesuai struktur tabel 'master' Anda
+    const templateData = [
+      { 
+        year: 2024,
+        month: 1,
+        posting_date: '2024-01-24', // Format YYYY-MM-DD
+        gl_account: '4112010100',
+        reference: 'REF-MANUAL',
+        assignment: 'ASG-2024',
+        document_number: 'DOC-100200',
+        invoice_type: 'F2',
+        pss: 'PSS-JKT',
+        business_area: 'JAKARTA',
+        amount_in_local_currency: 1500000, // Tipe bigint
+        quantity: '10',                    // Tipe text di DB, tapi isi angka string aman
+        rpl: 'RPL-01',
+        material: 'MAT-999',
+        material_description: 'Contoh Nama Barang',
+        material_group: 'GRP-A',
+        material_type: 'ZFG',
+        product: 'Product Name',
+        cust_code: 'C-0001',
+        cust_name: 'PT. CONTOH CUSTOMER',
+        cust_group: 'DISTRIBUTOR',
+        key_account_type: 'KA REGIONAL',
+        pic: 'Budi Santoso',
+        area: 'Jawa Barat'
+      }
+    ]
+
+    // Buat Worksheet
+    const ws = XLSX.utils.json_to_sheet(templateData)
+
+    // Atur Lebar Kolom (Agar rapi saat dibuka di Excel)
+    const wscols = [
+        {wch: 6},  // year
+        {wch: 5},  // month
+        {wch: 12}, // posting_date
+        {wch: 15}, // gl_account
+        {wch: 15}, // reference
+        {wch: 15}, // assignment
+        {wch: 15}, // document_number
+        {wch: 10}, // invoice_type
+        {wch: 10}, // pss
+        {wch: 12}, // business_area
+        {wch: 20}, // amount_in_local_currency
+        {wch: 8},  // quantity
+        {wch: 10}, // rpl
+        {wch: 15}, // material
+        {wch: 30}, // material_description (Lebar)
+        {wch: 15}, // material_group
+        {wch: 10}, // material_type
+        {wch: 20}, // product
+        {wch: 12}, // cust_code
+        {wch: 30}, // cust_name (Lebar)
+        {wch: 15}, // cust_group
+        {wch: 15}, // key_account_type
+        {wch: 15}, // pic
+        {wch: 15}  // area
+    ];
+    ws['!cols'] = wscols;
+
+    // Buat File & Download
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Template Master")
+    XLSX.writeFile(wb, "Template_Import_Master.xlsx")
+  }
+
   const processImport = async () => {
     if (!file) return
     if (!confirm("Konfirmasi: Import data ini ke Master Database?")) return
@@ -93,16 +163,13 @@ export default function ImportDataPage() {
     setProgress(5)
 
     try {
-      // 1. Baca File
       const data = await file.arrayBuffer()
-      
       const workbook = XLSX.read(data, { cellDates: true })
       const worksheet = workbook.Sheets[workbook.SheetNames[0]]
       const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
       if (jsonData.length === 0) throw new Error("File kosong/format salah.")
 
-      // 2. Sanitasi Data
       const sanitizedData = jsonData.map((row: any) => {
         const newRow: any = {}
         Object.keys(row).forEach(key => {
@@ -119,7 +186,6 @@ export default function ImportDataPage() {
 
       addLog(`File loaded & cleaned: ${sanitizedData.length} baris.`)
       
-      // 3. Batch Insert
       const BATCH_SIZE = 1000
       const totalBatches = Math.ceil(sanitizedData.length / BATCH_SIZE)
       
@@ -136,7 +202,6 @@ export default function ImportDataPage() {
         addLog(`Batch ${i+1}/${totalBatches} terupload.`)
       }
 
-      // 4. TRIGGER FUNCTION Refresh MV
       addLog('Menjalankan Refresh Data Sales...')
       const { error: rpcError } = await supabase.rpc('refresh_sales_data')
       
@@ -148,7 +213,6 @@ export default function ImportDataPage() {
       addLog('SELESAI. Data berhasil diperbarui.')
       setIsComplete(true)
       
-      // NOTIFIKASI SUKSES (Tanpa Redirect)
       alert('Import Sukses! Data Dashboard telah diperbarui.')
       
     } catch (error: any) {
@@ -164,7 +228,7 @@ export default function ImportDataPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100 flex justify-center items-start">
       <div className="w-full max-w-2xl">
 
-        {/* --- HEADER (Style SalesIssuesPage) --- */}
+        {/* --- HEADER --- */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
@@ -194,7 +258,8 @@ export default function ImportDataPage() {
                   {getThemeIcon(theme)}
                   <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
                 </button>
-
+                
+                {/* Dropdown Menu Items (Sama seperti sebelumnya) */}
                 <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
                   {['light', 'dark', 'system'].map((m: any) => (
                     <button
@@ -216,21 +281,32 @@ export default function ImportDataPage() {
         {/* --- MAIN CARD --- */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative">
           
-          {/* Decorative Top Line */}
-          <div className="h-1  w-full absolute top-0 left-0"></div>
+          <div className="h-1 w-full absolute top-0 left-0"></div>
 
           <div className="p-6 md:p-8 space-y-6 pt-8">
             
-            {/* Info / Warning Box */}
-            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" size={18} />
-              <div className="text-xs text-slate-600 dark:text-slate-300">
-                <p className="font-bold text-blue-700 dark:text-blue-400 mb-1">Panduan Format File:</p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Header kolom harus <strong>sama persis</strong> dengan nama kolom database.</li>
-                  <li>Pastikan tanggal berformat Text atau YYYY-MM-DD.</li>
-                </ul>
+            {/* --- TEMPLATE DOWNLOAD SECTION (REPLACED) --- */}
+            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                  <AlertCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">Belum punya format data?</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Download template resmi agar import berjalan lancar.<br/>
+                    Pastikan header kolom <strong className="text-slate-700 dark:text-slate-300">tidak diubah</strong>.
+                  </p>
+                </div>
               </div>
+              
+              <button 
+                onClick={handleDownloadTemplate}
+                className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 transition-all shadow-sm active:scale-95"
+              >
+                <FileDown size={16} />
+                Download Template
+              </button>
             </div>
 
             {/* Upload Area */}
@@ -286,7 +362,7 @@ export default function ImportDataPage() {
               </div>
             </div>
 
-            {/* Terminal Logs (Muncul saat proses atau ada logs) */}
+            {/* Terminal Logs */}
             {(isProcessing || logs.length > 0) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                  <div className="flex justify-between items-end border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -299,7 +375,6 @@ export default function ImportDataPage() {
                  </div>
                  
                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-300 shadow-inner relative overflow-hidden">
-                    {/* Progress Bar Line */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
                       <div className={`h-full transition-all duration-300 ease-out ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
                     </div>
@@ -321,7 +396,6 @@ export default function ImportDataPage() {
 
           {/* --- FOOTER ACTIONS --- */}
           <div className="bg-slate-50 dark:bg-slate-800/50 p-4 px-6 md:px-8 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 items-center">
-             
             <button 
                 type="button" 
                 onClick={() => router.back()}
@@ -358,7 +432,6 @@ export default function ImportDataPage() {
                 </button>
             )}
           </div>
-
         </div>
       </div>
     </main>

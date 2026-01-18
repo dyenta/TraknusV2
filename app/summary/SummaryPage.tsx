@@ -213,7 +213,7 @@ export default function SummaryPage() {
         const isSuperAdmin = email === 'dyentadwian@gmail.com' 
         setIsAdmin(isTraknus || isSuperAdmin)
 
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('email', email).single()
         setCurrentUserName(profile?.full_name || email.split('@')[0])
         setAuthChecking(false)
         fetchIssues()
