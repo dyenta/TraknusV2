@@ -679,20 +679,20 @@ export default function SalesPage() {
     if (isAuthChecking) return;
     setIsLoading(true); 
 
-    const getSingleFilter = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr[0];
+const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr;
     
     const optionsRpcArgs = { 
-      p_year: getSingleFilter(selectedYears), 
-      p_month: getSingleFilter(selectedMonths), 
-      p_area: getSingleFilter(selectedAreas), 
-      p_ba: getSingleFilter(selectedBusinessAreas), 
-      p_pss: getSingleFilter(selectedPSS), 
-      p_kat: getSingleFilter(selectedKeyAccountTypes), 
-      p_cust_group: getSingleFilter(selectedCustomerGroups), 
-      p_product: getSingleFilter(selectedProducts), 
-      p_cust_name: getSingleFilter(selectedCustomerNames),
-      p_material: getSingleFilter(selectedMaterials),
-      p_material_description: getSingleFilter(selectedMaterialDescriptions)
+      p_year: getFilterArray(selectedYears), 
+      p_month: getFilterArray(selectedMonths), 
+      p_area: getFilterArray(selectedAreas), 
+      p_ba: getFilterArray(selectedBusinessAreas), 
+      p_pss: getFilterArray(selectedPSS), 
+      p_kat: getFilterArray(selectedKeyAccountTypes),
+      p_cust_group: getFilterArray(selectedCustomerGroups), 
+      p_product: getFilterArray(selectedProducts), 
+      p_cust_name: getFilterArray(selectedCustomerNames),
+      p_material: getFilterArray(selectedMaterials),
+      p_material_description: getFilterArray(selectedMaterialDescriptions)
     };
     
     const analyticsRpcArgs = { 
