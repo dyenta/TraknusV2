@@ -536,6 +536,9 @@ export default function SalesPage() {
   const menuRef = useRef<HTMLDivElement>(null);
   const [activeLayer, setActiveLayer] = useState<'top' | 'hier'>('top');
 
+  // ACCESS STATE
+  const [userBaAccess, setUserBaAccess] = useState<string | null>(null);
+
   const [salesData, setSalesData] = useState<AggregatedRecord[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   
@@ -627,7 +630,10 @@ export default function SalesPage() {
     return MONTH_OPTIONS.filter(m => availableMonths.map(String).includes(m.value));
   };
 
-  // EFFECTS
+  // ==========================================
+  // EFFECTS & DATA FETCHING
+  // ==========================================
+
   useEffect(() => {
     const checkUserAuthentication = async () => {
       setIsAuthChecking(true);
@@ -637,15 +643,68 @@ export default function SalesPage() {
         return; 
       }
       
-      const email = user.email || '';
-      const isAllowed = email.endsWith('@traknus.co.id') || email === 'dyentadwian@gmail.com';
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('akses')
+        .eq('user_id', user.id)
+        .single()
+
+      // 1. LOAD SETTINGS FROM LOCAL STORAGE
+      const savedSettings = localStorage.getItem('sales_dashboard_prefs');
+      let parsedSettings: any = {};
       
-      if (!isAllowed) { 
-        router.replace('/sales-issues'); 
-      } else { 
+      if (savedSettings) {
+        try {
+          parsedSettings = JSON.parse(savedSettings);
+          
+          if(parsedSettings.years) setSelectedYears(parsedSettings.years);
+          if(parsedSettings.months) setSelectedMonths(parsedSettings.months);
+          if(parsedSettings.areas) setSelectedAreas(parsedSettings.areas);
+          // Note: Business Area is handled in Access Logic below
+          if(parsedSettings.pss) setSelectedPSS(parsedSettings.pss);
+          if(parsedSettings.kat) setSelectedKeyAccountTypes(parsedSettings.kat);
+          if(parsedSettings.custGroup) setSelectedCustomerGroups(parsedSettings.custGroup);
+          if(parsedSettings.custName) setSelectedCustomerNames(parsedSettings.custName);
+          if(parsedSettings.product) setSelectedProducts(parsedSettings.product);
+          if(parsedSettings.material) setSelectedMaterials(parsedSettings.material);
+          if(parsedSettings.matDesc) setSelectedMaterialDescriptions(parsedSettings.matDesc);
+
+          // Restore Hierarchy
+          if(parsedSettings.l1) setLevel1Field(parsedSettings.l1);
+          if(parsedSettings.l2) setLevel2Field(parsedSettings.l2);
+          if(parsedSettings.l3) setLevel3Field(parsedSettings.l3);
+          if(parsedSettings.l4) setLevel4Field(parsedSettings.l4);
+          if(parsedSettings.l5) setLevel5Field(parsedSettings.l5);
+          if(parsedSettings.l6) setLevel6Field(parsedSettings.l6);
+          
+          // Restore Zoom
+          if(parsedSettings.zoom) setZoomLevel(parsedSettings.zoom);
+        } catch (e) {
+          console.error("Gagal load settings", e);
+        }
+      }
+
+      // 2. CHECK ACCESS & SECURITY
+      if (profile?.akses === 'CUSTOMER') {
+        router.push('/') 
+      } else {
+        const superUserRoles = ['ADMIN', 'HO', 'MANAGEMENT', 'PUSAT'];
+
+        if (profile?.akses && !superUserRoles.includes(profile.akses)) {
+          // USER TERBATAS (LOCKED)
+          // Hiraukan local storage untuk Business Area, paksa sesuai profile
+          setUserBaAccess(profile.akses);
+          setSelectedBusinessAreas([profile.akses]); 
+        } else {
+          // SUPER USER (BEBAS)
+          // Gunakan setting dari local storage jika ada, default 'All'
+          if (parsedSettings.ba) {
+             setSelectedBusinessAreas(parsedSettings.ba);
+          }
+        }
+
         setIsAuthChecking(false); 
         setIsMounted(true); 
-        fetchAnalyticsData(); 
       }
     }
     checkUserAuthentication();
@@ -656,6 +715,41 @@ export default function SalesPage() {
     document.addEventListener("mousedown", handleClickOutsideMenu); 
     return () => document.removeEventListener("mousedown", handleClickOutsideMenu);
   }, []);
+
+  // AUTO SAVE PREFERENCES
+  useEffect(() => {
+    if (!isMounted || isAuthChecking) return;
+
+    const settingsToSave = {
+      years: selectedYears,
+      months: selectedMonths,
+      areas: selectedAreas,
+      ba: selectedBusinessAreas,
+      pss: selectedPSS,
+      kat: selectedKeyAccountTypes,
+      custGroup: selectedCustomerGroups,
+      custName: selectedCustomerNames,
+      product: selectedProducts,
+      material: selectedMaterials,
+      matDesc: selectedMaterialDescriptions,
+      l1: level1Field,
+      l2: level2Field,
+      l3: level3Field,
+      l4: level4Field,
+      l5: level5Field,
+      l6: level6Field,
+      zoom: zoomLevel
+    };
+
+    localStorage.setItem('sales_dashboard_prefs', JSON.stringify(settingsToSave));
+
+  }, [
+    selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas,
+    selectedPSS, selectedKeyAccountTypes, selectedCustomerGroups, selectedCustomerNames,
+    selectedProducts, selectedMaterials, selectedMaterialDescriptions,
+    level1Field, level2Field, level3Field, level4Field, level5Field, level6Field,
+    zoomLevel, isMounted, isAuthChecking
+  ]);
 
   const fetchAnalyticsData = useCallback(async () => {
     if (isAuthChecking) return;
@@ -869,7 +963,22 @@ export default function SalesPage() {
                  <MultiSelect label="Tahun" options={filterOptions.years} selectedValues={selectedYears} onChange={setSelectedYears} />
                  <MultiSelect label="Bulan" rawOptions={filterOptions.months} selectedValues={selectedMonths} onChange={setSelectedMonths} />
                  <MultiSelect label="Area" options={filterOptions.areas} selectedValues={selectedAreas} onChange={setSelectedAreas} />
-                 <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                 <div className="flex flex-col">
+                   {userBaAccess ? (
+                     <div className="flex flex-col">
+                       <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">
+                         Business Area
+                       </label>
+                       <div className="flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-sm cursor-default">
+                         <span className="truncate font-medium text-slate-700 dark:text-slate-200">
+                           {userBaAccess}
+                         </span>
+                       </div>
+                     </div>
+                   ) : (
+                     <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                   )}
+                 </div>
              </div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />

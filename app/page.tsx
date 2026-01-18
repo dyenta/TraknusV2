@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-// Tambahkan ChevronDown untuk indikator dropdown
 import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
@@ -16,6 +15,9 @@ export default function MenuPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [userPhone, setUserPhone] = useState<string | null>(null)
+  // [BARU] State untuk menyimpan hak akses (HO, BRANCH, CUSTOMER)
+  const [userAccess, setUserAccess] = useState<string | null>(null)
+  
   const [isLoading, setIsLoading] = useState(true)
   
   // State untuk Dropdown Tema
@@ -35,17 +37,22 @@ export default function MenuPage() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('*')
-          .eq('id', user.id)
+          .select('*') // Pastikan kolom 'akses' ada di tabel profiles
+          .eq('user_id', user.id)
           .single()
 
         if (profile) {
           setUserName(profile.full_name || 'Pengguna')
           setUserPhone(profile.phone_number || '-')
+          // [BARU] Simpan data akses ke state
+          setUserAccess(profile.akses || null) 
+          
           if (profile.email) setUserEmail(profile.email)
         } else {
           setUserName(user.user_metadata?.full_name || 'Pengguna')
           setUserPhone(user.user_metadata?.phone_number || '-')
+          // Jika tidak ada profile di DB, anggap tidak punya akses khusus
+          setUserAccess(null)
         }
       }
 
@@ -105,13 +112,19 @@ export default function MenuPage() {
     },
   ]
 
+  // [BARU] Logika filter berdasarkan kolom 'akses' dari database
   const visibleMenuItems = allMenuItems.filter((item) => {
+    // 1. Jika menu tidak dibatasi, tampilkan untuk semua
     if (!item.restricted) return true
-    if (userEmail) {
-      const isTraknus = userEmail.endsWith('@traknus.co.id')
-      const isSpecificUser = userEmail === 'dyentadwian@gmail.com'
-      return isTraknus || isSpecificUser
+    
+    // 2. Jika menu dibatasi (Sales Analytics), cek userAccess
+    // Tampilkan jika user memiliki akses DAN aksesnya BUKAN 'CUSTOMER'
+    // Artinya: HO dan BRANCH boleh melihat, CUSTOMER tidak boleh.
+    if (userAccess && userAccess !== 'CUSTOMER') {
+      return true
     }
+
+    // Default sembunyikan jika logika di atas tidak terpenuhi
     return false
   })
 
@@ -155,6 +168,8 @@ export default function MenuPage() {
               <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
                 <User size={16} className="text-emerald-600" />
                 <span>{userName}</span>
+                {/* Opsional: Menampilkan Role/Akses untuk debugging */}
+                {/* <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">{userAccess}</span> */}
               </div>
               <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
               <div className="flex items-center gap-2">
@@ -175,7 +190,7 @@ export default function MenuPage() {
               <div className="relative">
                 <button 
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} // Delay biar klik menu sempat tereksekusi
+                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} 
                   className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm font-medium shadow-sm"
                 >
                   {getThemeIcon(theme)}
