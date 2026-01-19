@@ -566,7 +566,7 @@ export default function SalesPage() {
   const [selectedMaterialDescriptions, setSelectedMaterialDescriptions] = useState(['All']);
 
   // VIEW STATE
-  const [level1Field, setLevel1Field] = useState('business_area');
+  const [level1Field, setLevel1Field] = useState('key_account_type');
   const [level2Field, setLevel2Field] = useState('');
   const [level3Field, setLevel3Field] = useState('');
   const [level4Field, setLevel4Field] = useState('');
