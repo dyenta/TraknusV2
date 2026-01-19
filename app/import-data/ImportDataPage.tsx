@@ -2,20 +2,34 @@
 
 import React, { useState, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
+import { saveAs } from 'file-saver'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Save, UploadCloud, FileSpreadsheet, Loader2, 
   AlertCircle, Terminal, FileType, Sun, Moon, Laptop,
-  CheckCircle2, ChevronDown, RotateCcw, FileDown // Added FileDown
+  CheckCircle2, ChevronDown, RotateCcw, FileDown
 } from 'lucide-react'
 import { useTheme } from '../components/ThemeProvider'
+
+// ==========================================
+// KONFIGURASI DATA
+// ==========================================
+const TABLE_NAME = 'master'; 
+
+const REQUIRED_HEADERS = [
+  "Year", "Month", "Posting Date", "GL Account", "Reference", 
+  "Assignment", "Document Number", "Invoice Type", "PSS", 
+  "Business Area", "Amount (Local)", "Quantity", "RPL", 
+  "Material", "Material Description", "Material Group", "Material Type", 
+  "Product", "Customer Code", "Customer Name", "Customer Group", 
+  "Key Account Type", "PIC", "Area"
+];
 
 export default function ImportDataPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
-  
-  // State untuk Dropdown Tema
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const supabase = useMemo(() => createBrowserClient(
@@ -32,21 +46,10 @@ export default function ImportDataPage() {
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const TABLE_NAME = 'master' 
-
-  // --- HELPER UNTUK ICON TEMA ---
-  const getThemeIcon = (t: string) => {
-    switch (t) {
-      case 'light': return <Sun size={14} />
-      case 'dark': return <Moon size={14} />
-      case 'system': return <Laptop size={14} />
-      default: return <Sun size={14} />
-    }
-  }
-
-  // --- LOGIC ---
+  // --- LOGIC HELPER ---
   const addLog = (message: string) => {
-    setLogs(prev => [...prev, `> ${message}`])
+    // Menambahkan log ke terminal UI
+    setLogs(prev => [...prev, message.startsWith('>') ? message : `> ${message}`])
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,152 +86,256 @@ export default function ImportDataPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // --- DOWNLOAD TEMPLATE FUNCTION ---
-  const handleDownloadTemplate = () => {
-    // Data dummy sesuai struktur tabel 'master' Anda
-    const templateData = [
-      { 
-        year: 2024,
-        month: 1,
-        posting_date: '2024-01-24', // Format YYYY-MM-DD
-        gl_account: '4112010100',
-        reference: 'REF-MANUAL',
-        assignment: 'ASG-2024',
-        document_number: 'DOC-100200',
-        invoice_type: 'F2',
-        pss: 'PSS-JKT',
-        business_area: 'JAKARTA',
-        amount_in_local_currency: 1500000, // Tipe bigint
-        quantity: '10',                    // Tipe text di DB, tapi isi angka string aman
-        rpl: 'RPL-01',
-        material: 'MAT-999',
-        material_description: 'Contoh Nama Barang',
-        material_group: 'GRP-A',
-        material_type: 'ZFG',
-        product: 'Product Name',
-        cust_code: 'C-0001',
-        cust_name: 'PT. CONTOH CUSTOMER',
-        cust_group: 'DISTRIBUTOR',
-        key_account_type: 'KA REGIONAL',
-        pic: 'Budi Santoso',
-        area: 'Jawa Barat'
-      }
-    ]
-
-    // Buat Worksheet
-    const ws = XLSX.utils.json_to_sheet(templateData)
-
-    // Atur Lebar Kolom (Agar rapi saat dibuka di Excel)
-    const wscols = [
-        {wch: 6},  // year
-        {wch: 5},  // month
-        {wch: 12}, // posting_date
-        {wch: 15}, // gl_account
-        {wch: 15}, // reference
-        {wch: 15}, // assignment
-        {wch: 15}, // document_number
-        {wch: 10}, // invoice_type
-        {wch: 10}, // pss
-        {wch: 12}, // business_area
-        {wch: 20}, // amount_in_local_currency
-        {wch: 8},  // quantity
-        {wch: 10}, // rpl
-        {wch: 15}, // material
-        {wch: 30}, // material_description (Lebar)
-        {wch: 15}, // material_group
-        {wch: 10}, // material_type
-        {wch: 20}, // product
-        {wch: 12}, // cust_code
-        {wch: 30}, // cust_name (Lebar)
-        {wch: 15}, // cust_group
-        {wch: 15}, // key_account_type
-        {wch: 15}, // pic
-        {wch: 15}  // area
-    ];
-    ws['!cols'] = wscols;
-
-    // Buat File & Download
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Template Master")
-    XLSX.writeFile(wb, "Template_Import_Master.xlsx")
-  }
-
-  const processImport = async () => {
-    if (!file) return
-    if (!confirm("Konfirmasi: Import data ini ke Master Database?")) return
-
-    setIsProcessing(true)
-    setIsComplete(false)
-    setLogs(['Memulai proses...'])
-    setProgress(5)
-
-    try {
-      const data = await file.arrayBuffer()
-      const workbook = XLSX.read(data, { cellDates: true })
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-      const jsonData = XLSX.utils.sheet_to_json(worksheet)
-
-      if (jsonData.length === 0) throw new Error("File kosong/format salah.")
-
-      const sanitizedData = jsonData.map((row: any) => {
-        const newRow: any = {}
-        Object.keys(row).forEach(key => {
-          let value = row[key]
-          if (value instanceof Date) {
-            const offset = value.getTimezoneOffset() * 60000
-            const localDate = new Date(value.getTime() - offset)
-            value = localDate.toISOString().split('T')[0]
-          }
-          newRow[key] = value
-        })
-        return newRow
-      })
-
-      addLog(`File loaded & cleaned: ${sanitizedData.length} baris.`)
-      
-      const BATCH_SIZE = 1000
-      const totalBatches = Math.ceil(sanitizedData.length / BATCH_SIZE)
-      
-      for (let i = 0; i < totalBatches; i++) {
-        const start = i * BATCH_SIZE
-        const end = start + BATCH_SIZE
-        const batch = sanitizedData.slice(start, end)
-
-        const { error } = await supabase.from(TABLE_NAME).insert(batch)
-        if (error) throw new Error(error.message)
-        
-        const currentProgress = Math.round(((i + 1) / totalBatches) * 85)
-        setProgress(currentProgress)
-        addLog(`Batch ${i+1}/${totalBatches} terupload.`)
-      }
-
-      addLog('Menjalankan Refresh Data Sales...')
-      const { error: rpcError } = await supabase.rpc('refresh_sales_data')
-      
-      if (rpcError) {
-        throw new Error(`Gagal refresh data: ${rpcError.message}`)
-      }
-      
-      setProgress(100)
-      addLog('SELESAI. Data berhasil diperbarui.')
-      setIsComplete(true)
-      
-      alert('Import Sukses! Data Dashboard telah diperbarui.')
-      
-    } catch (error: any) {
-      console.error(error)
-      addLog(`ERROR: ${error.message}`)
-      alert('Gagal: ' + error.message)
-    } finally {
-      setIsProcessing(false)
+  const getThemeIcon = (t: string) => {
+    switch (t) {
+      case 'light': return <Sun size={14} />
+      case 'dark': return <Moon size={14} />
+      case 'system': return <Laptop size={14} />
+      default: return <Sun size={14} />
     }
   }
 
+  // Helper Format Date (YYYY-MM-DD)
+  const formatDateToDB = (input: any): string | null => {
+    if (!input) return null;
+    let dateObj: Date | null = null;
+
+    if (input instanceof Date) {
+        dateObj = input;
+    } else if (typeof input === 'string') {
+        const d = new Date(input);
+        if (!isNaN(d.getTime())) dateObj = d;
+    } else if (typeof input === 'number') {
+        dateObj = new Date(Math.round((input - 25569)*86400*1000));
+    }
+
+    if (dateObj) {
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    return String(input); 
+  }
+
+  // =========================================================================
+  // 1. DOWNLOAD TEMPLATE (ExcelJS)
+  // =========================================================================
+  const handleDownloadTemplate = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Template Upload');
+
+    sheet.columns = [
+      { header: 'Year', key: 'year', width: 8 },
+      { header: 'Month', key: 'month', width: 6 },
+      { header: 'Posting Date', key: 'posting_date', width: 15 },
+      { header: 'GL Account', key: 'gl_account', width: 12 },
+      { header: 'Reference', key: 'reference', width: 15 },
+      { header: 'Assignment', key: 'assignment', width: 15 },
+      { header: 'Document Number', key: 'document_number', width: 15 },
+      { header: 'Invoice Type', key: 'invoice_type', width: 10 },
+      { header: 'PSS', key: 'pss', width: 12 },
+      { header: 'Business Area', key: 'business_area', width: 15 },
+      { header: 'Amount (Local)', key: 'amount', width: 15 },
+      { header: 'Quantity', key: 'quantity', width: 10 },
+      { header: 'RPL', key: 'rpl', width: 10 },
+      { header: 'Material', key: 'material', width: 12 },
+      { header: 'Material Description', key: 'material_description', width: 30 },
+      { header: 'Material Group', key: 'material_group', width: 12 },
+      { header: 'Material Type', key: 'material_type', width: 10 },
+      { header: 'Product', key: 'product', width: 20 },
+      { header: 'Customer Code', key: 'cust_code', width: 15 },
+      { header: 'Customer Name', key: 'cust_name', width: 30 },
+      { header: 'Customer Group', key: 'cust_group', width: 20 },
+      { header: 'Key Account Type', key: 'key_account_type', width: 20 },
+      { header: 'PIC', key: 'pic', width: 20 },
+      { header: 'Area', key: 'area', width: 15 },
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.protection = { locked: true };
+
+    for (let i = 2; i <= 5000; i++) {
+        const row = sheet.getRow(i);
+        row.protection = { locked: false };
+
+        sheet.getCell(`A${i}`).dataValidation = {
+            type: 'whole', operator: 'between', formulae: [2000, 2099],
+            showErrorMessage: true, errorTitle: 'Salah Input', error: 'Tahun harus 2000-2099'
+        };
+        sheet.getCell(`B${i}`).dataValidation = {
+            type: 'whole', operator: 'between', formulae: [1, 12],
+            showErrorMessage: true, errorTitle: 'Salah Input', error: 'Bulan harus 1-12'
+        };
+        sheet.getCell(`K${i}`).dataValidation = {
+            type: 'decimal', operator: 'greaterThan', formulae: [0],
+            showErrorMessage: true, errorTitle: 'Salah Input', error: 'Amount harus angka'
+        };
+        sheet.getCell(`C${i}`).numFmt = 'yyyy-mm-dd';
+    }
+
+    await sheet.protect('admin123', {
+        selectLockedCells: false, selectUnlockedCells: true,
+        formatCells: false, insertRows: true, deleteRows: true,
+        insertColumns: false, deleteColumns: false,
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, 'Template_Master_Data.xlsx');
+  }
+
+  // =========================================================================
+  // 2. PROCESS IMPORT (Logic Update)
+  // =========================================================================
+  const processImport = async () => {
+    if (!file) return
+    if (!confirm(`Konfirmasi: Import data ini ke tabel '${TABLE_NAME}'?`)) return
+
+    setIsProcessing(true)
+    setIsComplete(false)
+    setLogs([])
+    addLog('Memulai analisis file...')
+    setProgress(5)
+  
+    const reader = new FileReader()
+    
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result
+        const workbook = XLSX.read(data, { type: 'binary', cellDates: true })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        
+        // --- 1. Validasi Header ---
+        const jsonDataRaw = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+        if (jsonDataRaw.length === 0) throw new Error("File kosong.")
+
+        const fileHeaders = (jsonDataRaw[0] as string[]).map(h => String(h).trim())
+        const missingHeaders = REQUIRED_HEADERS.filter(req => !fileHeaders.includes(req))
+
+        if (missingHeaders.length > 0) {
+           throw new Error(`HEADER SALAH. Hilang: ${missingHeaders.join(', ')}`)
+        }
+
+        addLog(`Header valid. Memproses data...`)
+        setProgress(20)
+
+        // --- 2. Validasi & Mapping Data ---
+        const jsonData: any[] = XLSX.utils.sheet_to_json(sheet)
+        const validRecords: any[] = []
+        const errors: string[] = []
+
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i]
+            const rowNum = i + 2 
+            
+            if (!row.Year || isNaN(Number(row.Year))) errors.push(`Baris ${rowNum}: 'Year' harus angka.`);
+            if (!row.Month || isNaN(Number(row.Month))) errors.push(`Baris ${rowNum}: 'Month' harus angka.`);
+            
+            const amt = row["Amount (Local)"];
+            if (amt === undefined || amt === null || isNaN(Number(amt))) {
+                errors.push(`Baris ${rowNum}: 'Amount (Local)' harus angka.`);
+            }
+
+            if (errors.length > 20) {
+                errors.push("... Terlalu banyak error. Perbaiki data.");
+                break;
+            }
+
+            const formattedDate = formatDateToDB(row["Posting Date"]);
+
+            validRecords.push({
+                year: Number(row.Year),
+                month: Number(row.Month),
+                posting_date: formattedDate,
+                gl_account: String(row["GL Account"] || ''),
+                reference: String(row["Reference"] || ''),
+                assignment: String(row["Assignment"] || ''),
+                document_number: String(row["Document Number"] || ''),
+                invoice_type: String(row["Invoice Type"] || ''),
+                pss: String(row["PSS"] || ''),
+                business_area: String(row["Business Area"] || ''),
+                amount_in_local_currency: Number(row["Amount (Local)"]),
+                quantity: String(row["Quantity"] || '0'), 
+                rpl: String(row["RPL"] || ''),
+                material: String(row["Material"] || ''),
+                material_description: String(row["Material Description"] || ''),
+                material_group: String(row["Material Group"] || ''),
+                material_type: String(row["Material Type"] || ''),
+                product: String(row["Product"] || ''),
+                cust_code: String(row["Customer Code"] || ''),
+                cust_name: String(row["Customer Name"] || ''),
+                cust_group: String(row["Customer Group"] || ''),
+                key_account_type: String(row["Key Account Type"] || ''),
+                pic: String(row["PIC"] || ''),
+                area: String(row["Area"] || '')
+            })
+        }
+
+        if (errors.length > 0) {
+            errors.forEach(err => addLog(`${err}`))
+            addLog("PROSES DIBATALKAN. Perbaiki data Excel Anda.")
+            setIsProcessing(false)
+            setProgress(0)
+            alert("Validasi Gagal! Cek log.")
+            return
+        }
+
+        addLog(`Data Valid (${validRecords.length} baris). Uploading ke tabel '${TABLE_NAME}'...`)
+        
+        // --- 3. Upload Batching ---
+        const BATCH_SIZE = 1000
+        const totalBatches = Math.ceil(validRecords.length / BATCH_SIZE)
+        
+        for (let i = 0; i < totalBatches; i++) {
+            const batch = validRecords.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
+            const { error } = await supabase.from(TABLE_NAME).insert(batch)
+            if (error) throw new Error(`Batch ${i+1} gagal: ${error.message}`)
+            
+            const currentProgress = 30 + Math.floor(((i + 1) / totalBatches) * 60)
+            setProgress(currentProgress)
+            addLog(`Batch ${i+1}/${totalBatches} sukses.`)
+        }
+
+        // --- 4. Refresh Data ---
+        addLog('Menjalankan Refresh Sales Data...')
+        const { error: rpcError } = await supabase.rpc('refresh_sales_data')
+        
+        if (rpcError) {
+             addLog(`Warning Refresh: ${rpcError.message}`)
+        } else {
+             addLog('Refresh Sales Data sukses.')
+        }
+
+        addLog('SELESAI! Semua data berhasil diimport.')
+        setIsComplete(true)
+        setIsProcessing(false)
+        setProgress(100)
+        alert('Import Sukses! Dashboard telah diperbarui.')
+
+      } catch (err: any) {
+        console.error(err)
+        addLog(`ERROR: ${err.message}`)
+        setIsProcessing(false)
+        setProgress(0)
+        alert('Gagal: ' + err.message)
+      }
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  // ==========================================
+  // RENDER UI (Layout Original)
+  // ==========================================
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100 flex justify-center items-start">
       <div className="w-full max-w-2xl">
 
-        {/* --- HEADER --- */}
+        {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
@@ -243,12 +350,11 @@ export default function ImportDataPage() {
                     Import Data Master
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Upload Excel/CSV untuk update data penjualan.
+                    Upload Excel/CSV untuk update data {TABLE_NAME}.
                 </p>
             </div>
           </div>
 
-          {/* THEME DROPDOWN */}
           <div className="relative">
                 <button 
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -258,16 +364,11 @@ export default function ImportDataPage() {
                   {getThemeIcon(theme)}
                   <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
                 </button>
-                
-                {/* Dropdown Menu Items (Sama seperti sebelumnya) */}
                 <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
                   {['light', 'dark', 'system'].map((m: any) => (
                     <button
                       key={m}
-                      onClick={() => {
-                        setTheme(m)
-                        setIsDropdownOpen(false)
-                      }}
+                      onClick={() => { setTheme(m); setIsDropdownOpen(false) }}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${theme === m ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                     >
                       {getThemeIcon(m)}
@@ -278,14 +379,13 @@ export default function ImportDataPage() {
           </div>
         </div>
 
-        {/* --- MAIN CARD --- */}
+        {/* MAIN CARD */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative">
-          
           <div className="h-1 w-full absolute top-0 left-0"></div>
 
           <div className="p-6 md:p-8 space-y-6 pt-8">
             
-            {/* --- TEMPLATE DOWNLOAD SECTION (REPLACED) --- */}
+            {/* TEMPLATE DOWNLOAD */}
             <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
@@ -295,7 +395,7 @@ export default function ImportDataPage() {
                   <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">Belum punya format data?</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                     Download template resmi agar import berjalan lancar.<br/>
-                    Pastikan header kolom <strong className="text-slate-700 dark:text-slate-300">tidak diubah</strong>.
+                    Data akan dimasukkan ke tabel: <strong className="text-slate-700 dark:text-slate-300">{TABLE_NAME}</strong>.
                   </p>
                 </div>
               </div>
@@ -309,7 +409,7 @@ export default function ImportDataPage() {
               </button>
             </div>
 
-            {/* Upload Area */}
+            {/* DRAG & DROP AREA */}
             <div className="space-y-3">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-2">
                 <FileSpreadsheet size={14} className="text-slate-400"/> 
@@ -362,7 +462,7 @@ export default function ImportDataPage() {
               </div>
             </div>
 
-            {/* Terminal Logs */}
+            {/* LOGS TERMINAL */}
             {(isProcessing || logs.length > 0) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                  <div className="flex justify-between items-end border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -374,19 +474,19 @@ export default function ImportDataPage() {
                     </span>
                  </div>
                  
-                 <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-300 shadow-inner relative overflow-hidden">
+                 <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-300 shadow-inner relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
                       <div className={`h-full transition-all duration-300 ease-out ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
                     </div>
 
                     <div className="h-28 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 pt-2 space-y-1">
                       {logs.map((l, i) => (
-                        <div key={i} className="flex gap-2">
-                            <span className="text-slate-500 shrink-0">$</span>
-                            <span>{l.replace('> ', '')}</span>
+                        <div key={i} className={`flex gap-2' text-slate-700 dark:text-slate-300 : ''}`}>
+                            <span className="text-slate-700 dark:text-slate-300">$</span>
+                            <span>{l.replace(/^> /, '')}</span>
                         </div>
                       ))}
-                      {isProcessing && <div className="animate-pulse pl-4 text-emerald-400">_ working...</div>}
+                      {isProcessing && <div className="animate-pulse pl-4 text-slate-400">_ working...</div>}
                     </div>
                  </div>
               </div>
@@ -394,7 +494,7 @@ export default function ImportDataPage() {
 
           </div>
 
-          {/* --- FOOTER ACTIONS --- */}
+          {/* ACTION BUTTONS */}
           <div className="bg-slate-50 dark:bg-slate-800/50 p-4 px-6 md:px-8 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 items-center">
             <button 
                 type="button" 
@@ -408,7 +508,7 @@ export default function ImportDataPage() {
             {isComplete ? (
                <button 
                  onClick={handleResetForm}
-                 className="px-6 py-2.5 rounded-lg text-sm font-bold text-white bg-slate-600 hover:bg-slate-700 flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                 className="px-6 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-400 hover:bg-slate-700 flex items-center gap-2 shadow-lg transition-all active:scale-95"
                >
                  <RotateCcw size={18}/> Import Lagi
                </button>
@@ -417,9 +517,9 @@ export default function ImportDataPage() {
                 onClick={processImport}
                 disabled={!file || isProcessing}
                 className={`
-                    px-6 py-2.5 rounded-lg text-sm font-bold text-white flex items-center gap-2 shadow-lg transition-all
+                    px-6 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2 shadow-lg transition-all
                     ${!file || isProcessing 
-                    ? 'bg-slate-400 cursor-not-allowed opacity-70 shadow-none' 
+                    ? 'bg-slate-400 cursor-not-allowed opacity-80 shadow-none' 
                     : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/30 active:scale-95'
                     }
                 `}

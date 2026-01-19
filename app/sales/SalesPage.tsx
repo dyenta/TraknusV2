@@ -538,6 +538,7 @@ export default function SalesPage() {
 
   // NEW STATE: Menyimpan akses BA User (jika terkunci)
   const [userBaAccess, setUserBaAccess] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   const [salesData, setSalesData] = useState<AggregatedRecord[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -645,6 +646,9 @@ export default function SalesPage() {
         .select('akses')
         .eq('user_id', user.id)
         .single()
+      
+      // Simpan role user untuk logika UI
+      if (profile) setUserRole(profile.akses);
 
       // LOGIKA KEAMANAN & FILTER OTOMATIS
       if (profile?.akses === 'CUSTOMER') {
@@ -866,10 +870,15 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
                                     className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50">
                                       <Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span>
                                     </button>
-                                    <button onClick={() => router.push('/import-data')} 
-                                    className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
-                                      <Upload size={14} className="text-emerald-500"/> <span>Import Data Master</span>
-                                    </button>
+                                    
+                                    {/* MODIFIED: HANYA TAMPIL JIKA USER ROLE ADALAH 'HO' */}
+                                    {userRole === 'HO' && (
+                                      <button onClick={() => router.push('/import-data')} 
+                                      className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                                        <Upload size={14} className="text-emerald-500"/> <span>Import Data Master</span>
+                                      </button>
+                                    )}
+
                                     <button onClick={() => router.push('/')} 
                                     className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                                       <LogOut size={14} className="text-blue-500"/> <span>Menu</span>
