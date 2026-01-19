@@ -896,7 +896,6 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
                  <MultiSelect label="Tahun" options={filterOptions.years} selectedValues={selectedYears} onChange={setSelectedYears} />
                  <MultiSelect label="Bulan" rawOptions={filterOptions.months} selectedValues={selectedMonths} onChange={setSelectedMonths} />
                  <MultiSelect label="Area" options={filterOptions.areas} selectedValues={selectedAreas} onChange={setSelectedAreas} />
-                 <div className="flex flex-col">
                    {userBaAccess ? (
                      <div className="flex flex-col">
                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">
@@ -911,7 +910,6 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
                    ) : (
                      <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
                    )}
-                 </div>
              </div>
              <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />
