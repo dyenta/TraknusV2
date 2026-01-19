@@ -8,10 +8,10 @@ import {
   Sun, Moon, Laptop 
 } from 'lucide-react' 
 import { createBrowserClient } from '@supabase/ssr'
-// Pastikan path ini sesuai (misal: ../components/ThemeProvider)
+// Pastikan path ini sesuai
 import { useTheme } from '../components/ThemeProvider'
 
-// --- KOMPONEN BARU: SEARCHABLE INPUT (COMBOBOX) ---
+// --- KOMPONEN: SEARCHABLE INPUT (COMBOBOX) ---
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: any) => {
     const [isOpen, setIsOpen] = useState(false)
     const [inputValue, setInputValue] = useState(value || "")
@@ -32,6 +32,7 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
         const handleDown = (e: MouseEvent) => { 
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
                 setIsOpen(false)
+                // Reset input ke value terakhir yang valid jika user klik di luar
                 if (value) setInputValue(value)
                 else setInputValue("") 
             }
@@ -74,15 +75,15 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl flex flex-col max-h-60 animate-in fade-in zoom-in-95 duration-200">
                     <div className="overflow-y-auto flex-1 p-1">
                         {filteredOptions.length > 0 ? (
-                            filteredOptions.map((opt: any) => (
+                            filteredOptions.map((opt: any, idx: number) => (
                                 <button 
-                                    key={opt.value} 
+                                    key={`${opt.value}-${idx}`}
                                     type="button"
                                     onClick={() => handleSelect(opt.value)}
                                     className={`w-full text-left px-3 py-2 text-xs rounded flex items-center justify-between transition-colors ${value === opt.value ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                 >
                                     <span>{opt.label}</span>
-                                    {value === opt.value && <Check size={14}/>}
+                                    {value === opt.value && <Check size={14} className="shrink-0"/>}
                                 </button>
                             ))
                         ) : (
@@ -99,7 +100,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
 
 export default function SalesIssuesPage() {
   const router = useRouter()
-  // Hook Tema
   const { theme, setTheme } = useTheme()
 
   const supabase = createBrowserClient(
@@ -110,10 +110,7 @@ export default function SalesIssuesPage() {
   const [loading, setLoading] = useState(false)
   const [customerList, setCustomerList] = useState<{name: string, group: string}[]>([])
   
-  // State untuk Dropdown Tema
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-
-  // State untuk Multiple Files
   const [files, setFiles] = useState<File[]>([])
 
   const [formData, setFormData] = useState({
@@ -125,7 +122,6 @@ export default function SalesIssuesPage() {
     created_by: ''
   })
 
-  // --- HELPER UNTUK ICON TEMA ---
   const getThemeIcon = (t: string) => {
     switch (t) {
       case 'light': return <Sun size={14} />
@@ -135,30 +131,45 @@ export default function SalesIssuesPage() {
     }
   }
 
-  // 1. Fetch Data
+  // --- FETCH DATA MENGGUNAKAN RPC & NORMALISASI ---
   useEffect(() => {
     const initData = async () => {
+        // 1. Get User Email
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-            const email = user.email || ''
-            setFormData(prev => ({ ...prev, created_by: email }))
+            setFormData(prev => ({ ...prev, created_by: user.email || '' }))
         }
 
         try {
-            const { data, error } = await supabase
-                .from('mv_sales_summary')
-                .select('cust_name, cust_group')
-                .not('cust_name', 'is', null)
-                .order('cust_name')
+            // 2. Panggil Function RPC 'get_all_customers'
+            // Ini menggantikan .from('mv_sales_summary').select(...)
+            const { data, error } = await supabase.rpc('get_all_customers')
             
             if (data && !error) {
                 const uniqueCust = new Map()
-                data.forEach(item => {
-                    if (!uniqueCust.has(item.cust_name)) {
-                        uniqueCust.set(item.cust_name, item.cust_group || '') 
+                
+                // 3. Logic Pembersih Double (Normalization)
+                data.forEach((item: any) => {
+                    if (item.cust_name) {
+                        // Bersihkan spasi depan/belakang
+                        const cleanName = item.cust_name.trim()
+                        // Buat Key huruf besar semua (untuk pengecekan duplikat)
+                        const key = cleanName.toUpperCase()
+
+                        // Hanya masukkan jika Key belum ada
+                        if (!uniqueCust.has(key)) {
+                            uniqueCust.set(key, { 
+                                name: cleanName, // Simpan nama yg rapi
+                                group: item.cust_group || '' 
+                            }) 
+                        }
                     }
                 })
-                setCustomerList(Array.from(uniqueCust, ([name, group]) => ({ name, group })))
+                
+                // Convert Map ke Array
+                setCustomerList(Array.from(uniqueCust.values()))
+            } else if (error) {
+                console.error("Error RPC:", error)
             }
         } catch (err) {
             console.error("Gagal memuat list customer:", err)
@@ -166,10 +177,10 @@ export default function SalesIssuesPage() {
     }
 
     initData()
-  }, [])
+  }, []) // Empty dependency array = run once on mount
 
-  // Handle Select dari Component Baru
   const handleCustomerSelect = (val: string) => {
+    // Cari berdasarkan nama yang sudah dinormalisasi di list
     const found = customerList.find(c => c.name === val)
     setFormData({
         ...formData,
@@ -182,11 +193,10 @@ export default function SalesIssuesPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  // --- HANDLE FILE CHANGE ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
         const newFiles = Array.from(e.target.files)
-        const MAX_SIZE = 50 * 1024 * 1024 // 50MB
+        const MAX_SIZE = 50 * 1024 * 1024 
         
         const validFiles = newFiles.filter(f => {
             if (f.size > MAX_SIZE) {
@@ -223,7 +233,6 @@ export default function SalesIssuesPage() {
     try {
       const uploadedUrls: string[] = []
 
-      // Upload Multiple Files
       if (files.length > 0) {
         const uploadPromises = files.map(async (file) => {
             const fileExt = file.name.split('.').pop()
@@ -272,7 +281,10 @@ export default function SalesIssuesPage() {
     }
   }
 
-  const customerOptions = customerList.map(c => ({ label: c.name, value: c.name }))
+  // Memoize options
+  const customerOptions = useMemo(() => 
+    customerList.map(c => ({ label: c.name, value: c.name })), 
+  [customerList])
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans text-slate-800 dark:text-slate-100 flex justify-center items-start">
@@ -301,7 +313,6 @@ export default function SalesIssuesPage() {
                   <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
                 </button>
 
-                {/* Dropdown Menu */}
                 <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
                   {['light', 'dark', 'system'].map((m: any) => (
                     <button
@@ -330,7 +341,7 @@ export default function SalesIssuesPage() {
                   <User size={12}/> Customer Name <span className="text-red-500">*</span>
                 </label>
                 
-                {/* COMPONENT COMBOBOX BARU */}
+                {/* COMBOBOX */}
                 <SearchableSelect 
                     placeholder="Ketik nama customer..."
                     value={formData.customer_name}
@@ -421,13 +432,11 @@ export default function SalesIssuesPage() {
                       onChange={handleFileChange}
                       className="hidden" 
                   />
-                  
                   <label 
                     htmlFor="file-upload" 
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg cursor-pointer transition-colors shadow-sm"
                   >
-                    <UploadCloud size={16} />
-                    Pilih File
+                    <UploadCloud size={16} /> Pilih File
                   </label>
                 </div>
 
