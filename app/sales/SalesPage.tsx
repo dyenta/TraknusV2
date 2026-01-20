@@ -723,7 +723,7 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
       const [optionsRes, dataRes, chartRes] = await Promise.all([ 
           supabase.rpc('get_dynamic_filter_options', optionsRpcArgs), 
           supabase.rpc('get_sales_analytics', analyticsRpcArgs), 
-          supabase.rpc('get_sales_analytics', { ...analyticsRpcArgs, lvl1_field: 'product', lvl2_field:'', lvl3_field:'', lvl4_field:'', lvl5_field:'', lvl6_field:'' }) 
+          supabase.rpc('get_sales_analytics', analyticsRpcArgs) 
       ]);
       
       if (optionsRes.data) {
@@ -784,7 +784,8 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
   
   const yAxisFormatter = (value: number) => { 
     if (value >= 1000000000) return (value / 1000000000).toFixed(1).replace(/\.0$/, '') + 'M'; 
-    if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M'; 
+    if (value >= 1000000) return (value / 1000000).toFixed(0) + 'Jt'; 
+    if (value >= 1000) return (value / 1000).toFixed(0) + 'Rb';
     return value.toString(); 
   }
 
