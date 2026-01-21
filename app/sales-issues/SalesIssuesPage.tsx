@@ -143,7 +143,7 @@ export default function SalesIssuesPage() {
                 const { data: profileData, error: profileError } = await supabase
                     .from('profiles')
                     .select('email') // Pastikan nama kolom di tabel profiles adalah 'email'
-                    .eq('id', user.id) // Pastikan primary key profiles adalah 'id' yang sama dengan auth.uid
+                    .eq('user_id', user.id) // Pastikan primary key profiles adalah 'id' yang sama dengan auth.uid
                     .single()
 
                 if (profileData && !profileError) {
