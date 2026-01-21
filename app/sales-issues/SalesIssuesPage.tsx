@@ -8,11 +8,12 @@ import {
   Sun, Moon, Laptop 
 } from 'lucide-react' 
 import { createBrowserClient } from '@supabase/ssr'
-// Pastikan path ini sesuai
+// Pastikan path ini sesuai dengan struktur project Anda
 import { useTheme } from '../components/ThemeProvider'
 
-// --- KOMPONEN: SEARCHABLE INPUT (COMBOBOX) ---
+// ... (Kode komponen SearchableSelect TETAP SAMA, tidak perlu diubah) ...
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: any) => {
+    // ... (isi komponen SearchableSelect sama seperti sebelumnya)
     const [isOpen, setIsOpen] = useState(false)
     const [inputValue, setInputValue] = useState(value || "")
     const containerRef = useRef<HTMLDivElement>(null)
@@ -32,7 +33,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled }: a
         const handleDown = (e: MouseEvent) => { 
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
                 setIsOpen(false)
-                // Reset input ke value terakhir yang valid jika user klik di luar
                 if (value) setInputValue(value)
                 else setInputValue("") 
             }
@@ -134,15 +134,28 @@ export default function SalesIssuesPage() {
   // --- FETCH DATA MENGGUNAKAN RPC & NORMALISASI ---
   useEffect(() => {
     const initData = async () => {
-        // 1. Get User Email
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-            setFormData(prev => ({ ...prev, created_by: user.email || '' }))
-        }
-
         try {
+            // 1. Get User Session
+            const { data: { user } } = await supabase.auth.getUser()
+            
+            if (user) {
+                // --- PERUBAHAN DISINI: Ambil dari tabel profiles ---
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('email') // Pastikan nama kolom di tabel profiles adalah 'email'
+                    .eq('id', user.id) // Pastikan primary key profiles adalah 'id' yang sama dengan auth.uid
+                    .single()
+
+                if (profileData && !profileError) {
+                    setFormData(prev => ({ ...prev, created_by: profileData.email }))
+                } else {
+                    // Fallback jika data di profiles kosong/error, pakai email auth bawaan
+                    console.warn("Profile not found, using auth email", profileError)
+                    setFormData(prev => ({ ...prev, created_by: user.email || '' }))
+                }
+            }
+
             // 2. Panggil Function RPC 'get_all_customers'
-            // Ini menggantikan .from('mv_sales_summary').select(...)
             const { data, error } = await supabase.rpc('get_all_customers')
             
             if (data && !error) {
@@ -151,36 +164,31 @@ export default function SalesIssuesPage() {
                 // 3. Logic Pembersih Double (Normalization)
                 data.forEach((item: any) => {
                     if (item.cust_name) {
-                        // Bersihkan spasi depan/belakang
                         const cleanName = item.cust_name.trim()
-                        // Buat Key huruf besar semua (untuk pengecekan duplikat)
                         const key = cleanName.toUpperCase()
 
-                        // Hanya masukkan jika Key belum ada
                         if (!uniqueCust.has(key)) {
                             uniqueCust.set(key, { 
-                                name: cleanName, // Simpan nama yg rapi
+                                name: cleanName, 
                                 group: item.cust_group || '' 
                             }) 
                         }
                     }
                 })
                 
-                // Convert Map ke Array
                 setCustomerList(Array.from(uniqueCust.values()))
             } else if (error) {
                 console.error("Error RPC:", error)
             }
         } catch (err) {
-            console.error("Gagal memuat list customer:", err)
+            console.error("Gagal memuat data:", err)
         }
     }
 
     initData()
-  }, []) // Empty dependency array = run once on mount
+  }, []) 
 
   const handleCustomerSelect = (val: string) => {
-    // Cari berdasarkan nama yang sudah dinormalisasi di list
     const found = customerList.find(c => c.name === val)
     setFormData({
         ...formData,
@@ -272,6 +280,7 @@ export default function SalesIssuesPage() {
       
       alert('Keluhan berhasil disimpan!')
       router.refresh()
+      // Ganti route di bawah sesuai kebutuhan
       router.push('/summary') 
 
     } catch (err: any) {
@@ -281,7 +290,6 @@ export default function SalesIssuesPage() {
     }
   }
 
-  // Memoize options
   const customerOptions = useMemo(() => 
     customerList.map(c => ({ label: c.name, value: c.name })), 
   [customerList])
