@@ -7,7 +7,7 @@ import {
   ArrowLeft, Search, Trash2, Loader2, User, 
   X, Send, Mail, Phone, Hash, Paperclip, 
   MessageSquare, Clock, CheckCircle2, Timer, CheckCircle, XCircle,
-  Sun, Moon, Laptop, ChevronDown, ShieldAlert
+  Sun, Moon, Laptop, ChevronDown, ShieldAlert, Image as ImageIcon, FileText, Plus
 } from 'lucide-react'
 import { useTheme } from '../components/ThemeProvider' 
 
@@ -43,6 +43,7 @@ interface Comment {
   message: string
   created_at: string
   is_admin: boolean
+  attachment_url?: string | null 
 }
 
 export default function SummaryPage() {
@@ -63,9 +64,8 @@ export default function SummaryPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState('')
   const [currentUserName, setCurrentUserName] = useState('')
   
-  // [BARU] State Role-Based Access (Mirip page.tsx)
   const [userAccess, setUserAccess] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false) // Admin = HO
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // State Modal Chat
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -74,6 +74,10 @@ export default function SummaryPage() {
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  // State untuk Multi Upload File
+  const [chatFiles, setChatFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // REF UNTUK REALTIME
   const selectedIssueRef = useRef<Issue | null>(null)
@@ -112,22 +116,9 @@ export default function SummaryPage() {
     }
     const sts = data.map(i => i.status)
     const uniqueSt = Array.from(new Set(sts))
-    // [UPDATE] Urutan status KAPITAL
     const sortOrder = ['OPEN', 'IN PROGRESS', 'WAITING CONFIRMATION', 'CLOSED']
     return uniqueSt.sort((a, b) => sortOrder.indexOf(a) - sortOrder.indexOf(b))
   }, [issues, filterGroup])
-
-  useEffect(() => {
-    if (filterGroup !== 'All' && !availableGroups.includes(filterGroup)) {
-      setFilterGroup('All')
-    }
-  }, [filterStatus, availableGroups, filterGroup])
-
-  useEffect(() => {
-    if (filterStatus !== 'All' && !availableStatuses.includes(filterStatus)) {
-      setFilterStatus('All')
-    }
-  }, [filterGroup, availableStatuses, filterStatus])
 
   // --- HELPER FUNCTIONS ---
   const getThemeIcon = (t: string) => {
@@ -152,15 +143,36 @@ export default function SummaryPage() {
     }
   }
 
+  const isImageFile = (url: string) => {
+    const cleanUrl = url.split('?')[0].toLowerCase()
+    return /\.(jpg|jpeg|png|gif|webp)$/.test(cleanUrl)
+  }
+
+  // --- SMART PARSER: Handle Format Lama (String) & Baru (JSON Array) ---
+  const parseAttachmentUrls = (attachmentUrl: string | null): string[] => {
+      if (!attachmentUrl) return []
+      
+      try {
+          // Coba parse sebagai JSON (Format Baru: ["url1", "url2"])
+          const parsed = JSON.parse(attachmentUrl)
+          
+          if (Array.isArray(parsed)) {
+              return parsed
+          }
+          // Jika parse berhasil tapi bukan array, kembalikan sebagai single array
+          return [attachmentUrl]
+          
+      } catch (e) {
+          // ERROR saat parse = Format Lama (String URL biasa: "https://...")
+          // Kita tangani sebagai array berisi 1 item
+          return [attachmentUrl]
+      }
+  }
+
+  // Render Attachment di List Issue
   const renderAttachments = (attachmentUrl: string | null) => {
-    if (!attachmentUrl) return null
-    let urls: string[] = []
-    try {
-        const parsed = JSON.parse(attachmentUrl)
-        urls = Array.isArray(parsed) ? parsed : [attachmentUrl]
-    } catch (e) {
-        urls = [attachmentUrl]
-    }
+    const urls = parseAttachmentUrls(attachmentUrl)
+    if (urls.length === 0) return null
 
     return (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -169,6 +181,38 @@ export default function SummaryPage() {
                     <Paperclip size={10} className="shrink-0"/> <span className="truncate">{getFileNameFromUrl(url)}</span>
                 </a>
             ))}
+        </div>
+    )
+  }
+
+  // Render Attachment di Chat Bubble (Support Multi & Single)
+  const renderChatAttachments = (attachmentUrl: string | null) => {
+    const urls = parseAttachmentUrls(attachmentUrl)
+    if (urls.length === 0) return null
+
+    return (
+        <div className={`mt-2 grid gap-2 ${urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {urls.map((url, idx) => {
+                if (isImageFile(url)) {
+                    return (
+                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="relative group overflow-hidden rounded-lg border border-black/10 block">
+                            <img 
+                                src={url} 
+                                alt="Attachment" 
+                                className="w-full h-auto max-h-48 object-cover hover:scale-105 transition-transform duration-300 bg-slate-100" 
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            />
+                        </a>
+                    )
+                } else {
+                    return (
+                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 rounded-lg text-xs font-bold bg-white/20 backdrop-blur-sm border border-black/10 hover:bg-white/40 transition-colors overflow-hidden text-slate-700 dark:text-slate-200">
+                            <Paperclip size={14} className="shrink-0"/> 
+                            <span className="truncate">{getFileNameFromUrl(url)}</span>
+                        </a>
+                    )
+                }
+            })}
         </div>
     )
   }
@@ -187,17 +231,12 @@ export default function SummaryPage() {
     return `${minutes} m`
   }
 
-  // --- DATA FETCHING (UPDATED WITH ROLE LOGIC) ---
+  // --- DATA FETCHING ---
   const fetchIssues = useCallback(async (overrideIsAdmin?: boolean, overrideEmail?: string) => {
-      // Menggunakan parameter override untuk memastikan fetch pertama menggunakan data terbaru
       const isUserAdmin = overrideIsAdmin !== undefined ? overrideIsAdmin : isAdmin
       const userEmail = overrideEmail || currentUserEmail
 
       try {
-        // [LOGIC FILTER]
-        // HO: Melihat semua.
-        // Non-HO: Join profiles!inner -> Filter berdasarkan email profile = userEmail login.
-        
         let query = supabase
             .from('sales_issues')
             .select(`*, profiles!inner (full_name, email, phone_number)`)
@@ -210,7 +249,6 @@ export default function SummaryPage() {
         const { data, error } = await query
         
         if (error) throw error
-        // Casting data karena TypeScript mungkin bingung dengan struktur join
         setIssues((data as any) || [])
         setLoading(false)
       } catch (err: any) { 
@@ -219,7 +257,7 @@ export default function SummaryPage() {
       } 
   }, [supabase, isAdmin, currentUserEmail])
 
-  // --- AUTH CHECK & ROLE ASSIGNMENT ---
+  // --- AUTH CHECK ---
   useEffect(() => {
     const init = async () => {
         setAuthChecking(true)
@@ -229,10 +267,9 @@ export default function SummaryPage() {
         const email = user.email || ''
         setCurrentUserEmail(email)
 
-        // [AMBIL PROFILE & AKSES] Menggantikan hardcode email
         const { data: profile } = await supabase
             .from('profiles')
-            .select('full_name, akses') // Mengambil kolom akses
+            .select('full_name, akses')
             .eq('email', email)
             .single()
 
@@ -242,21 +279,16 @@ export default function SummaryPage() {
         const userRole = profile?.akses || 'CUSTOMER' 
         setUserAccess(userRole)
 
-        // Tentukan Admin: Hanya jika akses === 'HO'
         const isHO = userRole === 'HO'
         setIsAdmin(isHO)
 
         setAuthChecking(false)
-        
-        // Panggil fetchIssues segera dengan role yang baru didapat
         fetchIssues(isHO, email)
     }
     init()
   }, []) 
 
-  // ==========================================
-  //      REALTIME LISTENER
-  // ==========================================
+  // --- REALTIME LISTENER ---
   useEffect(() => {
     if (authChecking) return
 
@@ -264,8 +296,6 @@ export default function SummaryPage() {
       .channel('app-global-changes')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sales_issues' }, async (payload) => {
           const updated = payload.new as Issue
-          
-          // Re-fetch single row untuk memastikan relasi profile & permission check
           const { data: fullData } = await supabase
             .from('sales_issues')
             .select(`*, profiles!inner (full_name, email, phone_number)`)
@@ -273,7 +303,6 @@ export default function SummaryPage() {
             .single()
 
            if (fullData) {
-               // Logic Filter Realtime: Hanya update jika Admin (HO) atau Pemilik Tiket
                const dataOwnerEmail = (fullData as any).profiles?.email
                if (isAdmin || dataOwnerEmail === currentUserEmail) {
                    setIssues(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated, profiles: (fullData as any).profiles } : i))
@@ -354,13 +383,7 @@ export default function SummaryPage() {
     setLoading(true) 
     try {
         if (issueToDelete.attachment_url) {
-            // Logic hapus file storage...
-            let filePaths: string[] = []
-            try {
-                const parsed = JSON.parse(issueToDelete.attachment_url)
-                filePaths = Array.isArray(parsed) ? parsed : [issueToDelete.attachment_url]
-            } catch (e) { filePaths = [issueToDelete.attachment_url] }
-
+            const filePaths = parseAttachmentUrls(issueToDelete.attachment_url)
             const bucketName = 'issue-attachments'
             const filesToRemove = filePaths.map(url => {
                 try {
@@ -396,23 +419,79 @@ export default function SummaryPage() {
       setSelectedIssue(issue)
       setIsChatOpen(true)
       setComments([]) 
+      setChatFiles([]) 
+      setNewMessage('')
       refreshComments(issue.id)
   }
 
+  // Handler Input File (Multi)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Cek apakah ada file yang dipilih
+    if (e.target.files && e.target.files.length > 0) {
+        // 1. Convert FileList bawaan browser menjadi Array JavaScript standar
+        const selectedFiles = Array.from(e.target.files)
+        
+        // 2. Masukkan ke state (gabungkan dengan file yg sudah ada sebelumnya jika mau)
+        setChatFiles(prev => [...prev, ...selectedFiles])
+    }
+
+    // 3. PENTING: Reset value input agar jika user memilih file yang sama lagi, event onChange tetap jalan
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '' 
+    }
+  }
+
+  const handleRemoveFile = (indexToRemove: number) => {
+    setChatFiles(prev => prev.filter((_, index) => index !== indexToRemove))
+  }
+
+  // Send Message dengan Multi Upload & Kompatibilitas Data
   const handleSendMessage = async (e?: React.FormEvent) => {
       e?.preventDefault()
-      if (!newMessage.trim() || !selectedIssue) return
-      // [UPDATE] Status Kapital
+      
+      if ((!newMessage.trim() && chatFiles.length === 0) || !selectedIssue) return
       if (selectedIssue.status === 'CLOSED') return
 
       setSending(true)
       try {
+          let attachmentUrlStr = null
+
+          // 1. Upload Semua File (jika ada)
+          if (chatFiles.length > 0) {
+            const uploadPromises = chatFiles.map(async (file) => {
+                const fileExt = file.name.split('.').pop()
+                const uniqueId = Math.random().toString(36).substring(2, 8)
+                const fileName = `chat/${selectedIssue.id}/${Date.now()}_${uniqueId}.${fileExt}`
+                
+                const { error: uploadError } = await supabase.storage
+                    .from('issue-attachments')
+                    .upload(fileName, file)
+
+                if (uploadError) throw uploadError
+
+                const { data: urlData } = supabase.storage
+                    .from('issue-attachments')
+                    .getPublicUrl(fileName)
+                
+                return urlData.publicUrl
+            })
+
+            const uploadedUrls = await Promise.all(uploadPromises)
+            
+            // Simpan sebagai JSON Array String
+            attachmentUrlStr = JSON.stringify(uploadedUrls)
+          }
+
+          // 2. Insert Comment
           const { error } = await supabase.from('issue_comments').insert({
-              issue_id: selectedIssue.id, message: newMessage, sender_name: currentUserName, is_admin: isAdmin
+              issue_id: selectedIssue.id, 
+              message: newMessage, 
+              sender_name: currentUserName, 
+              is_admin: isAdmin,
+              attachment_url: attachmentUrlStr 
           })
           if(error) throw error
 
-          // [UPDATE] Auto update status ke IN PROGRESS (Kapital) jika Admin merespon tiket OPEN
           if (isAdmin && selectedIssue.status === 'OPEN') {
               const now = new Date().toISOString()
               const extraFields = !selectedIssue.first_response_at 
@@ -420,16 +499,16 @@ export default function SummaryPage() {
                 : { admin_name: currentUserName }
               await updateStatus(selectedIssue.id, 'IN PROGRESS', extraFields)
           }
+          
           setNewMessage('')
+          setChatFiles([])
+
       } catch (err: any) { alert('Gagal kirim: ' + err.message) } 
       finally { setSending(false) }
   }
 
-  // --- LOGIC STATUS (UPDATE KAPITAL) ---
-
   const handleAdminProposeResolve = async () => {
       if(!selectedIssue) return
-      // [UPDATE] WAITING CONFIRMATION
       await updateStatus(selectedIssue.id, 'WAITING CONFIRMATION', { admin_name: currentUserName })
       await sendSystemMessage('Admin menandai pekerjaan selesai. Menunggu konfirmasi user.')
   }
@@ -439,7 +518,6 @@ export default function SummaryPage() {
       if(!confirm('Anda yakin masalah sudah tuntas? Tiket akan ditutup.')) return
       
       const now = new Date().toISOString()
-      // [UPDATE] CLOSED
       await updateStatus(selectedIssue.id, 'CLOSED', { resolved_at: now })
       await sendSystemMessage('User mengkonfirmasi masalah selesai. Tiket DITUTUP.')
   }
@@ -449,7 +527,6 @@ export default function SummaryPage() {
       const reason = prompt('Apa yang masih belum sesuai?') 
       if(!reason) return
 
-      // [UPDATE] IN PROGRESS
       await updateStatus(selectedIssue.id, 'IN PROGRESS', { resolved_at: null }) 
       await sendSystemMessage(`User menolak penyelesaian. Alasan: "${reason}". Status kembali ke IN PROGRESS.`)
   }
@@ -472,16 +549,13 @@ export default function SummaryPage() {
     })
   }, [issues, searchTerm, filterStatus, filterGroup])
 
-  // [UPDATE] Helper warna dengan status KAPITAL
   const getStatusColor = (st: string) => {
     if (st === 'CLOSED') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
     if (st === 'WAITING CONFIRMATION') return 'bg-amber-100 text-amber-700 border-amber-200'
     if (st === 'IN PROGRESS') return 'bg-amber-100 text-amber-700 border-amber-200'
-    // Default OPEN
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
 
-  // --- RENDER ---
   if (authChecking) return <div className="min-h-screen flex justify-center items-center"><Loader2 className="animate-spin text-blue-600"/></div>
 
   return (
@@ -523,7 +597,7 @@ export default function SummaryPage() {
             </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters & Table */}
         <div className="flex gap-4 mb-4">
             <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
@@ -541,7 +615,6 @@ export default function SummaryPage() {
             </select>
         </div>
 
-        {/* Tabel */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
@@ -622,6 +695,7 @@ export default function SummaryPage() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100 dark:bg-slate-950/50">
+                        {/* Detail Keluhan Awal */}
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-6">
                             <div className="flex justify-between items-start mb-2">
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Keluhan Awal</span>
@@ -631,6 +705,7 @@ export default function SummaryPage() {
                             {renderAttachments(selectedIssue.attachment_url)}
                         </div>
 
+                        {/* List Chat */}
                         {comments.length === 0 ? (
                             <div className="text-center text-slate-400 text-xs py-4 italic">Belum ada percakapan. Mulai respon di bawah.</div>
                         ) : (
@@ -641,7 +716,13 @@ export default function SummaryPage() {
                                     <div key={c.id} className={`flex flex-col ${c.is_admin ? 'items-end' : 'items-start'}`}>
                                         <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${c.is_admin ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-none'}`}>
                                             <div className="font-bold text-[10px] mb-1 opacity-80 flex justify-between gap-4"><span>{c.sender_name} {c.is_admin ? '(Key Account)' : ''}</span></div>
-                                            <p>{c.message}</p>
+                                            
+                                            {/* Render Message Text */}
+                                            {c.message && <p className="whitespace-pre-wrap">{c.message}</p>}
+                                            
+                                            {/* Render Chat Attachment (Aman untuk Format Lama & Baru) */}
+                                            {c.attachment_url && renderChatAttachments(c.attachment_url)}
+
                                         </div>
                                         <span className="text-[10px] text-slate-400 mt-1 px-1">{new Date(c.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                     </div>
@@ -652,15 +733,86 @@ export default function SummaryPage() {
                     </div>
 
                     <div className="p-3 bg-white dark:bg-slate-900 border-t dark:border-slate-800 shrink-0">
-                        {/* [UPDATE] CLOSED */}
+                        {/* Input Area */}
                         {selectedIssue.status !== 'CLOSED' && (
-                            <form onSubmit={handleSendMessage} className="flex gap-2 mb-3">
-                                <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Tulis balasan..." className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"/>
-                                <button type="submit" disabled={sending || !newMessage.trim()} className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all">{sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}</button>
-                            </form>
+                            <div className="flex flex-col gap-2">
+                                
+                                {/* AREA PREVIEW FILE (DIPERBAIKI: Ukuran Mini & Fix X Terpotong) */}
+                                {chatFiles.length > 0 && (
+                                    // TAMBAHKAN 'pt-3' DISINI AGAR TOMBOL X TIDAK TERPOTONG
+                                    <div className="flex gap-3 overflow-x-auto pt-3 pb-2 px-1 scrollbar-hide">
+                                        {chatFiles.map((file, idx) => (
+                                            <div key={idx} className="relative shrink-0 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 w-32 shadow-sm animate-in fade-in zoom-in duration-200">
+                                                <div className="p-1.5 bg-blue-100 text-blue-600 rounded-md shrink-0">
+                                                    {file.type.startsWith('image/') ? <ImageIcon size={14}/> : <FileText size={14}/>}
+                                                </div>
+                                                <div className="flex flex-col overflow-hidden">
+                                                    <span className="text-[10px] font-bold truncate block w-full text-slate-700 dark:text-slate-200" title={file.name}>{file.name}</span>
+                                                    <span className="text-[9px] text-slate-400">{(file.size / 1024).toFixed(0)} KB</span>
+                                                </div>
+                                                
+                                                {/* TOMBOL HAPUS (Diperkecil & Posisi disesuaikan) */}
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => handleRemoveFile(idx)} 
+                                                    className="absolute -top-2 -right-2 p-0.5 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-transform hover:scale-110 z-10 border-2 border-white dark:border-slate-900"
+                                                >
+                                                    <X size={10}/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        
+                                        {/* Tombol Tambah File Lagi (+) */}
+                                        <button 
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()} 
+                                            className="shrink-0 w-8 h-full min-h-10 flex items-center justify-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-slate-400 hover:text-blue-500 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
+                                            title="Tambah file lain"
+                                        >
+                                            <Plus size={16}/>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* FORM TEXT & TOMBOL KIRIM */}
+                                <form onSubmit={handleSendMessage} className="flex gap-2 mb-3 items-end">
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleFileSelect} 
+                                        className="hidden" 
+                                        multiple 
+                                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                                    />
+                                    
+                                    <button 
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="p-3 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors mb-0.5"
+                                        title="Lampirkan File"
+                                    >
+                                        <Paperclip size={20}/>
+                                    </button>
+
+                                    <input 
+                                        type="text" 
+                                        value={newMessage} 
+                                        onChange={e => setNewMessage(e.target.value)} 
+                                        placeholder={chatFiles.length > 0 ? "Tambahkan pesan (opsional)..." : "Tulis balasan..."} 
+                                        className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all"
+                                    />
+                                    
+                                    <button 
+                                        type="submit" 
+                                        disabled={sending || (!newMessage.trim() && chatFiles.length === 0)} 
+                                        className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-400 transition-all mb-0.5 shadow-md"
+                                    >
+                                        {sending ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}
+                                    </button>
+                                </form>
+                            </div>
                         )}
                         <div className="flex items-center justify-end border-t border-slate-100 dark:border-slate-800 pt-2">
-                            {/* [UPDATE] WAITING CONFIRMATION & CLOSED */}
                             {isAdmin && selectedIssue.status !== 'CLOSED' && selectedIssue.status !== 'WAITING CONFIRMATION' && (
                                 <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><CheckCircle size={14}/> Ajukan Selesai</button>
                             )}

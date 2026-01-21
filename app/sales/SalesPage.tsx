@@ -5,7 +5,8 @@ import {
   RefreshCw, Filter, MinusSquare, PlusSquare, 
   Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, 
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Upload,
-  Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList
+  Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList,
+  ArrowDownAZ, ArrowUpAZ, ArrowDown01, ArrowUp01, SortAsc, SortDesc
 } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
@@ -397,11 +398,13 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 // LOGIC HOOKS
 // ==========================================
 
-function usePivotTableData({ data, expandedCols, expandedRows, activeLevels }: any) {
+// Tambahkan parameter sortBy dan sortOrder
+function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder }: any) {
   return useMemo(() => {
     const uniqueYears = Array.from(new Set(data.map((d: any) => String(d.year)))).sort() as string[];
     const finalColumnKeys: string[] = [];
 
+    // ... (Logika Column Keys TETAP SAMA seperti sebelumnya) ...
     uniqueYears.forEach(year => {
       if (expandedCols[year]) {
         const monthsInYear = Array.from(new Set(data.filter((d: any) => String(d.year) === year).map((d: any) => d.month)))
@@ -416,6 +419,7 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels }: a
     const columnTotals: Record<string, number> = {};
     const rootMap: Record<string, PivotNode> = {};
 
+    // ... (Logika Loop Data / Build Map TETAP SAMA seperti sebelumnya) ...
     for (const item of data) {
       const yearStr = String(item.year);
       const monthStr = item.month < 10 ? `0${item.month}` : String(item.month);
@@ -468,17 +472,33 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels }: a
       });
     }
 
+    // --- BAGIAN INI DIMODIFIKASI UNTUK SORTING ---
     const processMapToNodes = (map: any): PivotNode[] => {
       return Object.values(map)
-        .sort((a: any, b: any) => a.label.localeCompare(b.label))
+        .sort((a: any, b: any) => {
+           // Logika Sorting
+           if (sortBy === 'value') {
+             // Sort by Amount (rowTotal)
+             return sortOrder === 'asc' 
+               ? a.rowTotal - b.rowTotal 
+               : b.rowTotal - a.rowTotal;
+           } else {
+             // Sort by Name (Label)
+             return sortOrder === 'asc'
+               ? a.label.localeCompare(b.label)
+               : b.label.localeCompare(a.label);
+           }
+        })
         .map((node: any) => {
           if (node.childMap) {
-            node.children = processMapToNodes(node.childMap);
+            node.children = processMapToNodes(node.childMap); // Rekursif sorting ke anak-anaknya
           }
           return node;
         });
     };
+    // ---------------------------------------------
 
+    // ... (Sisa fungsi TETAP SAMA) ...
     const visibleRows: PivotNode[] = [];
     const traverseAndCollectVisible = (nodes: PivotNode[]) => {
       nodes.forEach(node => {
@@ -512,7 +532,7 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels }: a
       getHeaderInfo 
     };
 
-  }, [data, expandedCols, expandedRows, activeLevels]);
+  }, [data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder]); // Tambahkan dependency
 }
 
 // ==========================================
@@ -535,7 +555,8 @@ export default function SalesPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [activeLayer, setActiveLayer] = useState<'top' | 'hier'>('top');
-
+  const [sortBy, setSortBy] = useState<'name' | 'value'>('value'); // Default sort by Value (Amount) agar yang terbesar diatas
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   // NEW STATE: Menyimpan akses BA User (jika terkunci)
   const [userBaAccess, setUserBaAccess] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -590,7 +611,9 @@ export default function SalesPage() {
     data: salesData, 
     expandedCols, 
     expandedRows, 
-    activeLevels: activeHierarchyLevels 
+    activeLevels: activeHierarchyLevels,
+    sortBy,      // <--- Pass this
+    sortOrder    // <--- Pass this
   });
 
   const visibleYears = useMemo(() => {
@@ -892,38 +915,54 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
             </div>
           </div>
           
+          {/* --- BAGIAN FILTER (UPDATE: Struktur 3 Baris, Layout Dipaksa Tetap 4-4-3 di Mobile) --- */}
+          {/* --- BAGIAN FILTER (UPDATE: Lebar Kotak Seragam, Total Baris 3 Lebih Pendek) --- */}
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
+             
+             {/* STRATEGI:
+                 - max-w-3xl : Membuat total lebar lebih pendek (tidak kepanjangan).
+                 - grid-cols-4 : Dipakai di SEMUA baris (termasuk baris 3).
+                 - Hasilnya : Ukuran per-kotak filter akan sama persis. Baris 3 akan kosong di ujung kanan.
+             */}
+
+             {/* BARIS 1: 4 Kolom (Penuh) */}
+             <div className="grid grid-cols-4 gap-2 w-full max-w-2xl">
                  <MultiSelect label="Tahun" options={filterOptions.years} selectedValues={selectedYears} onChange={setSelectedYears} />
                  <MultiSelect label="Bulan" rawOptions={filterOptions.months} selectedValues={selectedMonths} onChange={setSelectedMonths} />
                  <MultiSelect label="Area" options={filterOptions.areas} selectedValues={selectedAreas} onChange={setSelectedAreas} />
-                   {userBaAccess ? (
-                     <div className="flex flex-col">
-                       <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">
-                         Business Area
-                       </label>
-                       <div className="flex items-center justify-between gap-2 w-full md:w-auto md:min-w-32 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-sm cursor-default">
-                         <span className="truncate font-medium text-slate-700 dark:text-slate-200">
-                           {userBaAccess}
-                         </span>
-                       </div>
+                 
+                 {userBaAccess ? (
+                   <div className="flex flex-col w-full">
+                     <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase truncate">
+                       Business Area
+                     </label>
+                     <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-sm cursor-default overflow-hidden">
+                       <span className="truncate font-medium text-slate-700 dark:text-slate-200">
+                         {userBaAccess}
+                       </span>
                      </div>
-                   ) : (
-                     <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
-                   )}
+                   </div>
+                 ) : (
+                   <MultiSelect label="Business Area" options={filterOptions.businessAreas} selectedValues={selectedBusinessAreas} onChange={setSelectedBusinessAreas} />
+                 )}
              </div>
-             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
+
+             {/* BARIS 2: 4 Kolom (Penuh) */}
+             <div className="grid grid-cols-4 gap-2 w-full max-w-2xl">
                  <MultiSelect label="Key Account" options={filterOptions.keyAccountTypes} selectedValues={selectedKeyAccountTypes} onChange={setSelectedKeyAccountTypes} />
                  <MultiSelect label="Customer Group" options={filterOptions.customerGroups} selectedValues={selectedCustomerGroups} onChange={setSelectedCustomerGroups} />
                  <MultiSelect label="Customer Name" options={filterOptions.customerNames} selectedValues={selectedCustomerNames} onChange={setSelectedCustomerNames} />
                  <MultiSelect label="PSS" options={filterOptions.pss} selectedValues={selectedPSS} onChange={setSelectedPSS} />
              </div>
-             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
+
+             {/* BARIS 3: Tetap pakai grid-cols-4 agar lebar per-item SAMA dengan atasnya */}
+             <div className="grid grid-cols-4 gap-2 w-full max-w-2xl">
                  <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
                  <MultiSelect label="Material Desc" options={filterOptions.materialDescriptions} selectedValues={selectedMaterialDescriptions} onChange={setSelectedMaterialDescriptions} />
                  <MultiSelect label="Material" options={filterOptions.materials} selectedValues={selectedMaterials} onChange={setSelectedMaterials} />
-
+                 {/* Slot ke-4 dibiarkan kosong agar alignment terjaga */}
              </div>
+
           </div>
         </div>
 
@@ -960,17 +999,65 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
            onClickCapture={() => setActiveLayer('hier')}
            className={`bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center gap-3 relative transition-colors ${activeLayer === 'hier' ? 'z-50' : 'z-40'}`}
         >
-           <div className="w-full flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase"><Maximize size={16}/><span>Zoom View</span></div>
-              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                <button onClick={() => setZoomLevel(p => Math.max(0.4, Number((p - 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button>
-                <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-24 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/>
-                <button onClick={() => setZoomLevel(p => Math.min(1.5, Number((p + 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button>
-                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoomLevel * 100).toFixed(0)}%</span>
+           {/* BARIS ATAS: SORTING & ZOOM */}
+           {/* Saya gunakan justify-end dan grouping agar Sort ada di kiri Zoom, tapi tetap di sisi kanan layout */}
+           <div className="w-full flex flex-col md:flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1 gap-3">
+              
+              {/* Spacer Kiri (Agar controls terdorong ke kanan) */}
+              <div className="hidden md:block"></div> 
+
+              <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                  
+                  {/* --- SORTING CONTROLS (DI SEBELAH KIRI ZOOM) --- */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase hidden sm:inline">Sort:</span>
+                    
+                    {/* Toggle Nama / Amount */}
+                    <div className="flex bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 p-0.5">
+                        <button 
+                            onClick={() => setSortBy('name')}
+                            className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-all ${sortBy === 'name' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            title="Urutkan berdasarkan Nama"
+                        >
+                            <ArrowDownAZ size={12}/> <span className="hidden sm:inline">Nama</span>
+                        </button>
+                        <button 
+                            onClick={() => setSortBy('value')}
+                            className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-all ${sortBy === 'value' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            title="Urutkan berdasarkan Amount"
+                        >
+                            <ArrowDown01 size={12}/> <span className="hidden sm:inline">Amount</span>
+                        </button>
+                    </div>
+                    
+                    {/* Toggle Asc / Desc */}
+                    <button 
+                        onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        className="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                        title={sortOrder === 'asc' ? "Terkecil ke Terbesar" : "Terbesar ke Terkecil"}
+                    >
+                        {sortOrder === 'asc' ? <SortAsc size={14}/> : <SortDesc size={14}/>}
+                    </button>
+                  </div>
+
+                  {/* Separator Kecil */}
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+
+                  {/* --- ZOOM CONTROLS (ASLI - TIDAK DIUBAH INTERNYA) --- */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase sm:flex"><Maximize size={14}/><span>Zoom</span></div>
+                    <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                        <button onClick={() => setZoomLevel(p => Math.max(0.4, Number((p - 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button>
+                        <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-20 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/>
+                        <button onClick={() => setZoomLevel(p => Math.min(1.5, Number((p + 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button>
+                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoomLevel * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+
               </div>
            </div>
            
-           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 w-full">
+           <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 w-full">
              <DimensionSelectBox label="Level 1" value={level1Field} onChange={setLevel1Field} options={HIERARCHY_OPTIONS} />
              <DimensionSelectBox label="Level 2" value={level2Field} onChange={setLevel2Field} options={HIERARCHY_OPTIONS} />
              <DimensionSelectBox label="Level 3" value={level3Field} onChange={setLevel3Field} options={HIERARCHY_OPTIONS} />
