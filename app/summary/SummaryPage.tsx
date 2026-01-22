@@ -375,33 +375,67 @@ export default function SummaryPage() {
 
   const handleDelete = async (id: number) => {
     if(!isAdmin) return 
-    if(!confirm('PERINGATAN: Yakin ingin menghapus tiket ini secara permanen?')) return
+    if(!confirm('PERINGATAN: Yakin ingin menghapus tiket ini? Semua riwayat chat dan file lampiran di dalamnya akan ikut terhapus permanen.')) return
     
-    const issueToDelete = issues.find(i => i.id === id)
-    if (!issueToDelete) return
-
     setLoading(true) 
     try {
-        if (issueToDelete.attachment_url) {
-            const filePaths = parseAttachmentUrls(issueToDelete.attachment_url)
-            const bucketName = 'issue-attachments'
-            const filesToRemove = filePaths.map(url => {
+        const bucketName = 'issue-attachments'
+        let allPathsToRemove: string[] = []
+
+        // --- LANGKAH 1: Kumpulkan File dari TIKET UTAMA ---
+        const issueToDelete = issues.find(i => i.id === id)
+        if (issueToDelete && issueToDelete.attachment_url) {
+            const mainUrls = parseAttachmentUrls(issueToDelete.attachment_url)
+            allPathsToRemove.push(...mainUrls)
+        }
+
+        // --- LANGKAH 2: Kumpulkan File dari SEMUA KOMENTAR/CHAT ---
+        // Kita harus fetch dulu komentar dari DB sebelum tiketnya dihapus
+        const { data: commentsData } = await supabase
+            .from('issue_comments')
+            .select('attachment_url')
+            .eq('issue_id', id)
+
+        if (commentsData && commentsData.length > 0) {
+            commentsData.forEach(comment => {
+                if (comment.attachment_url) {
+                    const commentUrls = parseAttachmentUrls(comment.attachment_url)
+                    allPathsToRemove.push(...commentUrls)
+                }
+            })
+        }
+
+        // --- LANGKAH 3: Hapus FILE FISIK di Storage (Jika ada) ---
+        if (allPathsToRemove.length > 0) {
+            // Konversi Full URL menjadi Path Storage (path relative di bucket)
+            const filesToRemove = allPathsToRemove.map(url => {
                 try {
                     const decodedUrl = decodeURIComponent(url)
                     const splitKey = `/public/${bucketName}/`
                     const parts = decodedUrl.split(splitKey)
+                    // Ambil string setelah nama bucket
                     return parts.length > 1 ? parts[1] : decodedUrl.split('/').pop() 
                 } catch { return null }
-            }).filter(p => p) as string[]
+            }).filter(p => p) as string[] // Filter yang null/gagal parse
 
             if (filesToRemove.length > 0) {
-                await supabase.storage.from(bucketName).remove(filesToRemove)
+                // Eksekusi hapus massal ke Supabase Storage
+                const { error: storageError } = await supabase.storage
+                    .from(bucketName)
+                    .remove(filesToRemove)
+                
+                if (storageError) console.error('Gagal hapus sebagian file storage:', storageError.message)
             }
         }
 
+        // --- LANGKAH 4: Hapus DATA di Database ---
+        // Menghapus Parent (Sales Issue). 
+        // Asumsi: Tabel 'issue_comments' di database sudah diset "ON DELETE CASCADE".
+        // Jika ya, komentar akan hilang otomatis dari DB. Jika tidak, Anda perlu menghapus manual komentar dulu.
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
 
+        // --- LANGKAH 5: Update State UI ---
         setIssues(prev => prev.filter(item => item.id !== id))
         if (selectedIssue?.id === id) {
             setIsChatOpen(false)
