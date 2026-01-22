@@ -399,12 +399,13 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 // ==========================================
 
 // Tambahkan parameter sortBy dan sortOrder
-function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder }: any) {
+// Update parameter hook untuk menerima sortYear
+function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder, sortYear }: any) {
   return useMemo(() => {
     const uniqueYears = Array.from(new Set(data.map((d: any) => String(d.year)))).sort() as string[];
     const finalColumnKeys: string[] = [];
 
-    // ... (Logika Column Keys TETAP SAMA seperti sebelumnya) ...
+    // ... (Logika Column Keys TETAP SAMA) ...
     uniqueYears.forEach(year => {
       if (expandedCols[year]) {
         const monthsInYear = Array.from(new Set(data.filter((d: any) => String(d.year) === year).map((d: any) => d.month)))
@@ -419,7 +420,7 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
     const columnTotals: Record<string, number> = {};
     const rootMap: Record<string, PivotNode> = {};
 
-    // ... (Logika Loop Data / Build Map TETAP SAMA seperti sebelumnya) ...
+    // ... (Logika Loop Data TETAP SAMA) ...
     for (const item of data) {
       const yearStr = String(item.year);
       const monthStr = item.month < 10 ? `0${item.month}` : String(item.month);
@@ -472,16 +473,19 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
       });
     }
 
-    // --- BAGIAN INI DIMODIFIKASI UNTUK SORTING ---
+    // --- BAGIAN INI DIMODIFIKASI UNTUK SORTING SPESIFIK TAHUN ---
     const processMapToNodes = (map: any): PivotNode[] => {
       return Object.values(map)
         .sort((a: any, b: any) => {
            // Logika Sorting
            if (sortBy === 'value') {
-             // Sort by Amount (rowTotal)
+             // Tentukan nilai yang akan dibandingkan (Total Row atau Tahun Spesifik)
+             const valA = sortYear === 'Total' ? a.rowTotal : (a.values[sortYear] || 0);
+             const valB = sortYear === 'Total' ? b.rowTotal : (b.values[sortYear] || 0);
+
              return sortOrder === 'asc' 
-               ? a.rowTotal - b.rowTotal 
-               : b.rowTotal - a.rowTotal;
+               ? valA - valB 
+               : valB - valA;
            } else {
              // Sort by Name (Label)
              return sortOrder === 'asc'
@@ -491,14 +495,14 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
         })
         .map((node: any) => {
           if (node.childMap) {
-            node.children = processMapToNodes(node.childMap); // Rekursif sorting ke anak-anaknya
+            node.children = processMapToNodes(node.childMap); 
           }
           return node;
         });
     };
     // ---------------------------------------------
 
-    // ... (Sisa fungsi TETAP SAMA) ...
+    // ... (Sisa fungsi traverse TETAP SAMA) ...
     const visibleRows: PivotNode[] = [];
     const traverseAndCollectVisible = (nodes: PivotNode[]) => {
       nodes.forEach(node => {
@@ -511,6 +515,7 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
 
     traverseAndCollectVisible(processMapToNodes(rootMap));
 
+    // ... (Sisa fungsi getHeaderInfo TETAP SAMA) ...
     const getHeaderInfo = (key: string) => {
       if (key.includes('-Total')) {
         return { type: 'subtotal', label: key.split('-')[0], parent: key.split('-')[0] };
@@ -532,7 +537,7 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
       getHeaderInfo 
     };
 
-  }, [data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder]); // Tambahkan dependency
+  }, [data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder, sortYear]); // Tambahkan sortYear ke dependency
 }
 
 // ==========================================
@@ -557,6 +562,7 @@ export default function SalesPage() {
   const [activeLayer, setActiveLayer] = useState<'top' | 'hier'>('top');
   const [sortBy, setSortBy] = useState<'name' | 'value'>('value'); // Default sort by Value (Amount) agar yang terbesar diatas
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortYear, setSortYear] = useState<string>('Total');
   // NEW STATE: Menyimpan akses BA User (jika terkunci)
   const [userBaAccess, setUserBaAccess] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -613,7 +619,8 @@ export default function SalesPage() {
     expandedRows, 
     activeLevels: activeHierarchyLevels,
     sortBy,      // <--- Pass this
-    sortOrder    // <--- Pass this
+    sortOrder,    // <--- Pass this
+    sortYear
   });
 
   const visibleYears = useMemo(() => {
@@ -784,6 +791,12 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
   useEffect(() => { 
     if (!isAuthChecking) fetchAnalyticsData(); 
   }, [fetchAnalyticsData, isAuthChecking]); 
+
+  useEffect(() => {
+    if (sortYear !== 'Total' && !visibleYears.includes(sortYear)) {
+      setSortYear('Total');
+    }
+  }, [visibleYears, sortYear]);
 
   useEffect(() => setExpandedRows({}), [level1Field, level2Field, level3Field, level4Field, level5Field, level6Field]);
 
@@ -1029,6 +1042,23 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
                             <ArrowDown01 size={12}/> <span className="hidden sm:inline">Amount</span>
                         </button>
                     </div>
+
+                    {/* --- DROPDOWN TAHUN (HANYA MUNCUL JIKA SORT BY AMOUNT & ADA LEBIH DARI 1 TAHUN) --- */}
+                    {sortBy === 'value' && visibleYears.length > 1 && (
+                      <div className="relative">
+                        <select 
+                          value={sortYear}
+                          onChange={(e) => setSortYear(e.target.value)}
+                          className="appearance-none pl-2 pr-6 py-1 text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        >
+                          <option value="Total">Total (All)</option>
+                          {visibleYears.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                      </div>
+                    )}
                     
                     {/* Toggle Asc / Desc */}
                     <button 
