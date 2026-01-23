@@ -6,8 +6,10 @@ import {
   Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, 
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Upload,
   Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList,
-  ArrowDownAZ, ArrowUpAZ, ArrowDown01, ArrowUp01, SortAsc, SortDesc
+  ArrowDownAZ, ArrowDown01, SortAsc, SortDesc, Download
 } from 'lucide-react'
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
@@ -502,7 +504,8 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
     };
     // ---------------------------------------------
 
-    // ... (Sisa fungsi traverse TETAP SAMA) ...
+    const rowRoots = processMapToNodes(rootMap); 
+
     const visibleRows: PivotNode[] = [];
     const traverseAndCollectVisible = (nodes: PivotNode[]) => {
       nodes.forEach(node => {
@@ -513,10 +516,11 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
       });
     };
 
-    traverseAndCollectVisible(processMapToNodes(rootMap));
+    // 2. Gunakan variabel rowRoots tadi untuk generate visibleRows
+    traverseAndCollectVisible(rowRoots);
 
-    // ... (Sisa fungsi getHeaderInfo TETAP SAMA) ...
     const getHeaderInfo = (key: string) => {
+      // ... kode getHeaderInfo tetap sama ...
       if (key.includes('-Total')) {
         return { type: 'subtotal', label: key.split('-')[0], parent: key.split('-')[0] };
       }
@@ -531,13 +535,18 @@ function usePivotTableData({ data, expandedCols, expandedRows, activeLevels, sor
       return { type: 'year', label: key, parent: key };
     }
 
+    // 3. UPDATE RETURN OBJECT: Masukkan rowRoots ke dalam pivotData
     return { 
-      pivotData: { colKeys: finalColumnKeys, colTotals: columnTotals }, 
+      pivotData: { 
+        colKeys: finalColumnKeys, 
+        colTotals: columnTotals,
+        rowRoots: rowRoots // <--- TAMBAHKAN INI
+      }, 
       visibleRows, 
       getHeaderInfo 
     };
 
-  }, [data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder, sortYear]); // Tambahkan sortYear ke dependency
+  }, [data, expandedCols, expandedRows, activeLevels, sortBy, sortOrder, sortYear]);
 }
 
 // ==========================================
@@ -713,7 +722,7 @@ export default function SalesPage() {
     if (isAuthChecking) return;
     setIsLoading(true); 
 
-const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr;
+  const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr;
     
     const optionsRpcArgs = { 
       p_year: getFilterArray(selectedYears), 
@@ -843,6 +852,182 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
       )}
     </div>
   );
+
+  const handleExportExcel = async () => {
+    // 1. Validasi Data
+    if (!pivotData || !pivotData.rowRoots || pivotData.rowRoots.length === 0) {
+      return alert("Data belum siap atau tidak ada data (rowRoots kosong).");
+    }
+
+    // 2. Setup Workbook & Worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Laporan Sales');
+    
+    worksheet.properties.outlineProperties = {
+      summaryBelow: false,
+      summaryRight: false,
+    };
+
+    // 3. Definisi Kolom (Termasuk Logika YoY)
+    // Kita akan menyusun kolom secara dinamis: [Data] -> [YoY] (jika ada previous data)
+    const excelColumns: Partial<ExcelJS.Column>[] = [
+      { header: 'HIERARKI DATA', key: 'label', width: 45 },
+    ];
+
+    // Array bantuan untuk menyimpan mapping mana kolom yang punya YoY
+    const yoyMap: Record<string, string> = {}; 
+
+    pivotData.colKeys.forEach(key => {
+      // 3a. Tambahkan Kolom Data Utama (Amount)
+      excelColumns.push({ 
+        header: key, 
+        key: key, 
+        width: 18, 
+        style: { numFmt: '#,##0' } 
+      });
+
+      // 3b. Cek apakah kolom ini punya data periode sebelumnya (Previous Key)
+      const info = getHeaderInfo(key);
+      const prevKey = getDynamicPrevKey(key, info);
+
+      // Jika ada periode sebelumnya, tambahkan kolom YoY
+      if (prevKey) {
+        const yoyKey = `${key}_yoy`;
+        yoyMap[key] = prevKey; // Simpan mapping current->prev untuk perhitungan nanti
+        
+        excelColumns.push({
+          header: '% YoY', // Atau gunakan header: `${key} %`
+          key: yoyKey,
+          width: 12,
+          style: { 
+            numFmt: '0.0%', // Format Persentase Excel
+            font: { italic: true, color: { argb: 'FF555555' } } 
+          }
+        });
+      }
+    });
+
+    worksheet.columns = excelColumns as any;
+
+    // 4. Helper: Ratakan Tree menjadi Array
+    const getAllFlatRows = (nodes: PivotNode[]): PivotNode[] => {
+      let flatList: PivotNode[] = [];
+      nodes.forEach(node => {
+        flatList.push(node);
+        if (node.children && node.children.length > 0) {
+          flatList = flatList.concat(getAllFlatRows(node.children));
+        }
+      });
+      return flatList;
+    };
+
+    const allRows = getAllFlatRows(pivotData.rowRoots);
+
+    // 5. Styling Header
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 25;
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+
+    // 6. Loop Data & Render Baris
+    allRows.forEach(node => {
+      const rowData: any = { label: node.label };
+
+      pivotData.colKeys.forEach(key => {
+        // Isi Data Utama
+        const currentVal = node.values[key] || 0;
+        rowData[key] = currentVal;
+
+        // Isi Data YoY (Jika kolom ini terdaftar punya YoY)
+        if (yoyMap[key]) {
+          const prevKey = yoyMap[key];
+          const prevVal = node.values[prevKey] || 0;
+          const yoyKey = `${key}_yoy`;
+
+          if (prevVal !== 0) {
+            rowData[yoyKey] = (currentVal - prevVal) / prevVal; // Excel akan otomatis kali 100 karena format %
+          } else {
+            rowData[yoyKey] = 0; // Atau null jika ingin kosong
+          }
+        }
+      });
+
+      const row = worksheet.addRow(rowData);
+      
+      // Styling & Grouping (Sama seperti sebelumnya)
+      row.outlineLevel = node.level;
+      if (node.level > 0) row.hidden = true;
+      
+      row.getCell('label').alignment = { 
+        indent: node.level + 1, 
+        vertical: 'middle' 
+      };
+
+      const isParent = node.children && node.children.length > 0;
+      if (isParent) {
+        row.font = { bold: true };
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      } else {
+        row.font = { color: { argb: 'FF334155' } };
+      }
+
+      // Optional: Conditional Formatting untuk YoY (Warna Merah/Hijau di text)
+      // Loop cell di row ini, cek apakah key-nya mengandung _yoy
+      row.eachCell((cell, colNumber) => {
+        const colKey = excelColumns[colNumber - 1]?.key; 
+        if (colKey && colKey.toString().endsWith('_yoy')) {
+           const val = cell.value as number;
+           if (val < 0) {
+             cell.font = { color: { argb: 'FFFF0000' }, italic: true }; // Merah jika minus
+           } else if (val > 0) {
+             cell.font = { color: { argb: 'FF008000' }, italic: true }; // Hijau jika plus
+           }
+        }
+      });
+    });
+
+    // 7. Render Footer (Grand Total)
+    const footerData: any = { label: 'GRAND TOTAL' };
+    pivotData.colKeys.forEach(key => {
+      const currentVal = pivotData.colTotals[key] || 0;
+      footerData[key] = currentVal;
+
+      // Hitung YoY untuk Footer
+      if (yoyMap[key]) {
+        const prevKey = yoyMap[key];
+        const prevVal = pivotData.colTotals[prevKey] || 0;
+        const yoyKey = `${key}_yoy`;
+        
+        if (prevVal !== 0) {
+          footerData[yoyKey] = (currentVal - prevVal) / prevVal;
+        } else {
+          footerData[yoyKey] = 0;
+        }
+      }
+    });
+
+    const footerRow = worksheet.addRow(footerData);
+    footerRow.height = 25;
+    footerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    footerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; // Slate-700
+    footerRow.getCell('label').alignment = { horizontal: 'right', vertical: 'middle' }; // "GRAND TOTAL" dikanankan
+
+    // Terapkan Conditional Formatting juga untuk footer
+    footerRow.eachCell((cell, colNumber) => {
+        const colKey = excelColumns[colNumber - 1]?.key; 
+        if (colKey && colKey.toString().endsWith('_yoy')) {
+           const val = cell.value as number;
+           if (val < 0) cell.font = { color: { argb: 'FFFF9999' }, bold: true }; // Merah muda terang (karena bg gelap)
+           else if (val > 0) cell.font = { color: { argb: 'FF99FF99' }, bold: true }; // Hijau muda terang
+        }
+    });
+
+    // 8. Write & Save
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Laporan_Sales_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-2 md:p-6 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300">
@@ -1015,7 +1200,14 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
            {/* BARIS ATAS: SORTING & ZOOM */}
            {/* Saya gunakan justify-end dan grouping agar Sort ada di kiri Zoom, tapi tetap di sisi kanan layout */}
            <div className="w-full flex flex-col md:flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1 gap-3">
-              
+              <div className="flex items-center gap-2 w-full md:w-auto mb-2 md:mb-0">
+                <div className="text-indigo-600 dark:text-indigo-400">
+                  <LayoutList size={18} />
+                </div>
+                <span className="text-xs md:text-sm font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">
+                  Hierarchy Controls
+                </span>
+              </div>
               {/* Spacer Kiri (Agar controls terdorong ke kanan) */}
               <div className="hidden md:block"></div> 
 
@@ -1077,13 +1269,15 @@ const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ?
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase sm:flex"><Maximize size={14}/><span>Zoom</span></div>
                     <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                        <button onClick={() => setZoomLevel(p => Math.max(0.4, Number((p - 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomOut size={14}/></button>
-                        <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-20 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600"/>
-                        <button onClick={() => setZoomLevel(p => Math.min(1.5, Number((p + 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90"><ZoomIn size={14}/></button>
+                        <button onClick={() => setZoomLevel(p => Math.max(0.4, Number((p - 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90" title="Zoom Out"><ZoomOut size={14}/></button>
+                        <input type="range" min="0.4" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-20 md:w-32 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none accent-blue-600" title="Zoom Level"/>
+                        <button onClick={() => setZoomLevel(p => Math.min(1.5, Number((p + 0.1).toFixed(1))))} className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex justify-center active:scale-90" title="Zoom In"><ZoomIn size={14}/></button>
                         <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-8 text-right font-bold">{(zoomLevel * 100).toFixed(0)}%</span>
                     </div>
                   </div>
-
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+                  <button onClick={handleExportExcel}className="p-2 transition-colors rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100" title="Download Excel"><Download size={20} />
+                  </button>
               </div>
            </div>
            
