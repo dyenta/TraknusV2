@@ -896,7 +896,7 @@ export default function SalesPage() {
         yoyMap[key] = prevKey; // Simpan mapping current->prev untuk perhitungan nanti
         
         excelColumns.push({
-          header: '% YoY', // Atau gunakan header: `${key} %`
+          header: '% YTD', // Atau gunakan header: `${key} %`
           key: yoyKey,
           width: 12,
           style: { 
