@@ -854,62 +854,19 @@ export default function SalesPage() {
   );
 
   const handleExportExcel = async () => {
-    // 1. Validasi Data
-    if (!pivotData || !pivotData.rowRoots || pivotData.rowRoots.length === 0) {
-      return alert("Data belum siap atau tidak ada data (rowRoots kosong).");
-    }
+    // 0. Validasi Data
+    if (!pivotData || !pivotData.rowRoots || pivotData.rowRoots.length === 0) return;
 
-    // 2. Setup Workbook & Worksheet
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Laporan Sales');
-    
-    worksheet.properties.outlineProperties = {
-      summaryBelow: false,
-      summaryRight: false,
+    const worksheet = workbook.addWorksheet('Sales Data');
+
+    // --- 1. SETUP GROUPING (Agar tombol expand muncul di ATAS/Parent) ---
+    worksheet.properties.outlineProperties = { 
+      summaryBelow: false, 
+      summaryRight: false 
     };
 
-    // 3. Definisi Kolom (Termasuk Logika YoY)
-    // Kita akan menyusun kolom secara dinamis: [Data] -> [YoY] (jika ada previous data)
-    const excelColumns: Partial<ExcelJS.Column>[] = [
-      { header: 'HIERARKI DATA', key: 'label', width: 45 },
-    ];
-
-    // Array bantuan untuk menyimpan mapping mana kolom yang punya YoY
-    const yoyMap: Record<string, string> = {}; 
-
-    pivotData.colKeys.forEach(key => {
-      // 3a. Tambahkan Kolom Data Utama (Amount)
-      excelColumns.push({ 
-        header: key, 
-        key: key, 
-        width: 18, 
-        style: { numFmt: '#,##0' } 
-      });
-
-      // 3b. Cek apakah kolom ini punya data periode sebelumnya (Previous Key)
-      const info = getHeaderInfo(key);
-      const prevKey = getDynamicPrevKey(key, info);
-
-      // Jika ada periode sebelumnya, tambahkan kolom YoY
-      if (prevKey) {
-        const yoyKey = `${key}_yoy`;
-        yoyMap[key] = prevKey; // Simpan mapping current->prev untuk perhitungan nanti
-        
-        excelColumns.push({
-          header: '% YTD', // Atau gunakan header: `${key} %`
-          key: yoyKey,
-          width: 12,
-          style: { 
-            numFmt: '0.0%', // Format Persentase Excel
-            font: { italic: true, color: { argb: 'FF555555' } } 
-          }
-        });
-      }
-    });
-
-    worksheet.columns = excelColumns as any;
-
-    // 4. Helper: Ratakan Tree menjadi Array
+    // --- 2. DATA FLATTENING ---
     const getAllFlatRows = (nodes: PivotNode[]): PivotNode[] => {
       let flatList: PivotNode[] = [];
       nodes.forEach(node => {
@@ -920,113 +877,172 @@ export default function SalesPage() {
       });
       return flatList;
     };
-
     const allRows = getAllFlatRows(pivotData.rowRoots);
 
-    // 5. Styling Header
-    const headerRow = worksheet.getRow(1);
-    headerRow.height = 25;
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-    headerRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    // --- 3. DEFINISI KOLOM & DATA (Persiapan untuk Table) ---
+    const colDefs: { key: string, type: 'amount' | 'yoy', prevKey?: string }[] = [];
+    const tableColumns: any[] = [
+        { name: 'HIERARKI DATA', totalsRowLabel: 'GRAND TOTAL', filterButton: true }
+    ];
+    colDefs.push({ key: 'label', type: 'amount' });
 
-    // 6. Loop Data & Render Baris
-    allRows.forEach(node => {
-      const rowData: any = { label: node.label };
-
-      pivotData.colKeys.forEach(key => {
-        // Isi Data Utama
-        const currentVal = node.values[key] || 0;
-        rowData[key] = currentVal;
-
-        // Isi Data YoY (Jika kolom ini terdaftar punya YoY)
-        if (yoyMap[key]) {
-          const prevKey = yoyMap[key];
-          const prevVal = node.values[prevKey] || 0;
-          const yoyKey = `${key}_yoy`;
-
-          if (prevVal !== 0) {
-            rowData[yoyKey] = (currentVal - prevVal) / prevVal; // Excel akan otomatis kali 100 karena format %
-          } else {
-            rowData[yoyKey] = 0; // Atau null jika ingin kosong
-          }
-        }
-      });
-
-      const row = worksheet.addRow(rowData);
-      
-      // Styling & Grouping (Sama seperti sebelumnya)
-      row.outlineLevel = node.level;
-      if (node.level > 0) row.hidden = true;
-      
-      row.getCell('label').alignment = { 
-        indent: node.level + 1, 
-        vertical: 'middle' 
-      };
-
-      const isParent = node.children && node.children.length > 0;
-      if (isParent) {
-        row.font = { bold: true };
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-      } else {
-        row.font = { color: { argb: 'FF334155' } };
-      }
-
-      // Optional: Conditional Formatting untuk YoY (Warna Merah/Hijau di text)
-      // Loop cell di row ini, cek apakah key-nya mengandung _yoy
-      row.eachCell((cell, colNumber) => {
-        const colKey = excelColumns[colNumber - 1]?.key; 
-        if (colKey && colKey.toString().endsWith('_yoy')) {
-           const val = cell.value as number;
-           if (val < 0) {
-             cell.font = { color: { argb: 'FFFF0000' }, italic: true }; // Merah jika minus
-           } else if (val > 0) {
-             cell.font = { color: { argb: 'FF008000' }, italic: true }; // Hijau jika plus
-           }
-        }
-      });
-    });
-
-    // 7. Render Footer (Grand Total)
-    const footerData: any = { label: 'GRAND TOTAL' };
     pivotData.colKeys.forEach(key => {
-      const currentVal = pivotData.colTotals[key] || 0;
-      footerData[key] = currentVal;
+        tableColumns.push({ name: key, totalsRowFunction: 'custom', filterButton: true });
+        colDefs.push({ key: key, type: 'amount' });
 
-      // Hitung YoY untuk Footer
-      if (yoyMap[key]) {
-        const prevKey = yoyMap[key];
-        const prevVal = pivotData.colTotals[prevKey] || 0;
-        const yoyKey = `${key}_yoy`;
-        
-        if (prevVal !== 0) {
-          footerData[yoyKey] = (currentVal - prevVal) / prevVal;
+        const info = getHeaderInfo(key);
+        const prevKey = getDynamicPrevKey(key, info);
+
+        if (prevKey) {
+            const yoyHeader = `% YTD ${key}`;
+            tableColumns.push({ name: yoyHeader, totalsRowFunction: 'custom', filterButton: true });
+            colDefs.push({ key: `${key}_yoy`, type: 'yoy', prevKey });
+        }
+    });
+
+    // Siapkan Array Data + Metadata untuk Styling nanti
+    const tableRows: any[][] = [];
+    const rowMetadata: { level: number, isParent: boolean }[] = [];
+
+    allRows.forEach(node => {
+        const rowValues: any[] = [];
+        colDefs.forEach((def, idx) => {
+            if (idx === 0) {
+                rowValues.push(node.label);
+            } else {
+                if (def.type === 'amount') {
+                    rowValues.push(node.values[def.key] || 0);
+                } else if (def.type === 'yoy' && def.prevKey) {
+                    const current = node.values[def.key.replace('_yoy', '')] || 0;
+                    const prev = node.values[def.prevKey] || 0;
+                    rowValues.push(prev !== 0 ? (current - prev) / prev : 0);
+                }
+            }
+        });
+        tableRows.push(rowValues);
+        rowMetadata.push({ level: node.level, isParent: !!(node.children && node.children.length > 0) });
+    });
+
+    // --- 4. BUAT TABLE (Kunci agar Footer tidak tersorting) ---
+    // Kita gunakan theme 'None' agar warna tidak berubah drastis, tapi tetap kita timpa manual nanti.
+    worksheet.addTable({
+        name: 'SalesTable',
+        ref: 'A1',
+        headerRow: true,
+        totalsRow: true,
+        style: {
+            theme: 'TableStyleLight1', // Theme dasar
+            showRowStripes: false,     // Matikan belang-belang bawaan excel
+        },
+        columns: tableColumns,
+        rows: tableRows,
+    });
+
+    // --- 5. RESTORE GROUPING & WARNA (Override Manual) ---
+    // Table merender data mentah, jadi kita harus loop ulang untuk inject Style & Grouping
+    
+    // a. Styling Header (Row 1) - Warna Gelap Asli
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }; // Putih
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Slate-800
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // b. Styling Body (Row 2 s/d Data Terakhir)
+    rowMetadata.forEach((meta, index) => {
+        const rowIndex = index + 2; // Data mulai baris 2
+        const row = worksheet.getRow(rowIndex);
+
+        // >> FITUR EXPAND DIKEMBALIKAN DISINI <<
+        row.outlineLevel = meta.level; 
+        if (meta.level > 0) {
+           row.hidden = true; // Default collapse
+        }
+
+        // Indentasi Label
+        row.getCell(1).alignment = { indent: meta.level + 1, vertical: 'middle' };
+
+        // >> WARNA DIKEMBALIKAN DISINI <<
+        if (meta.isParent) {
+            // Warna Parent (Slate-50 / Abu Muda) + Bold
+            row.font = { bold: true };
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }; 
         } else {
-          footerData[yoyKey] = 0;
+            // Warna Child (Text Slate-700)
+            row.font = { color: { argb: 'FF334155' } };
+            // Pastikan background putih/transparan (timpa bawaan table)
+            row.fill = { type: 'pattern', pattern: 'none' }; 
         }
-      }
+
+        // Formatting Angka & Warna YoY (Merah/Hijau)
+        row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+            if (colNum === 1) return;
+            const def = colDefs[colNum - 1];
+            
+            if (def && def.type === 'amount') {
+                cell.numFmt = '#,##0';
+            } else if (def && def.type === 'yoy') {
+                cell.numFmt = '0.0%';
+                const val = cell.value as number;
+                if (val < 0) cell.font = { color: { argb: 'FFFF0000' }, italic: true };
+                else if (val > 0) cell.font = { color: { argb: 'FF008000' }, italic: true };
+            }
+        });
     });
 
-    const footerRow = worksheet.addRow(footerData);
-    footerRow.height = 25;
-    footerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    footerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; // Slate-700
-    footerRow.getCell('label').alignment = { horizontal: 'right', vertical: 'middle' }; // "GRAND TOTAL" dikanankan
+    // --- 6. INJECT VALUE & STYLE GRAND TOTAL (Row Terakhir) ---
+    const totalRowIndex = worksheet.rowCount; // Baris paling bawah otomatis jadi Total Row oleh addTable
+    const totalRow = worksheet.getRow(totalRowIndex);
 
-    // Terapkan Conditional Formatting juga untuk footer
-    footerRow.eachCell((cell, colNumber) => {
-        const colKey = excelColumns[colNumber - 1]?.key; 
-        if (colKey && colKey.toString().endsWith('_yoy')) {
-           const val = cell.value as number;
-           if (val < 0) cell.font = { color: { argb: 'FFFF9999' }, bold: true }; // Merah muda terang (karena bg gelap)
-           else if (val > 0) cell.font = { color: { argb: 'FF99FF99' }, bold: true }; // Hijau muda terang
+    // Styling Grand Total (Warna Gelap Slate-700 + Teks Putih)
+    totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+    totalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+
+    // Hitung Manual Value Grand Total (Karena Table YoY formula tidak otomatis)
+    colDefs.forEach((def, idx) => {
+        if (idx === 0) return; 
+
+        const cell = totalRow.getCell(idx + 1);
+        
+        if (def.type === 'amount') {
+            const totalVal = pivotData.colTotals[def.key] || 0;
+            cell.value = totalVal;
+            cell.numFmt = '#,##0';
+        } else if (def.type === 'yoy' && def.prevKey) {
+            const curTotal = pivotData.colTotals[def.key.replace('_yoy', '')] || 0;
+            const prevTotal = pivotData.colTotals[def.prevKey] || 0;
+            const val = prevTotal !== 0 ? (curTotal - prevTotal) / prevTotal : 0;
+            
+            cell.value = val;
+            cell.numFmt = '0.0%';
+
+            // Warna Indikator YoY di Footer (Warna Pastel Terang agar terbaca di background gelap)
+            if (val < 0) cell.font = { color: { argb: 'FFFFAAAA' }, italic: true, bold: true }; // Merah Muda
+            else if (val > 0) cell.font = { color: { argb: 'FFAAFFAA' }, italic: true, bold: true }; // Hijau Muda
         }
     });
 
-    // 8. Write & Save
+    // Border Ganda di atas Footer (Pemisah Visual)
+    totalRow.eachCell(cell => {
+       cell.border = {
+         top: { style: 'double', color: { argb: 'FF94A3B8' } },
+         bottom: { style: 'thin', color: { argb: 'FF334155' } }
+       };
+    });
+
+    // Atur Lebar Kolom
+    worksheet.columns.forEach((col, idx) => {
+        if (idx === 0) col.width = 45;
+        else col.width = 16;
+    });
+
+    // Freeze Header
+    worksheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+
+    // Simpan
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `Laporan_Sales_${new Date().toISOString().slice(0,10)}.xlsx`);
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Laporan_Sales_${new Date().toISOString().slice(0,10)}.xlsx`);
   }
 
   return (
