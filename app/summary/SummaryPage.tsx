@@ -390,7 +390,6 @@ export default function SummaryPage() {
         }
 
         // --- LANGKAH 2: Kumpulkan File dari SEMUA KOMENTAR/CHAT ---
-        // Kita harus fetch dulu komentar dari DB sebelum tiketnya dihapus
         const { data: commentsData } = await supabase
             .from('issue_comments')
             .select('attachment_url')
@@ -429,9 +428,6 @@ export default function SummaryPage() {
         }
 
         // --- LANGKAH 4: Hapus DATA di Database ---
-        // Menghapus Parent (Sales Issue). 
-        // Asumsi: Tabel 'issue_comments' di database sudah diset "ON DELETE CASCADE".
-        // Jika ya, komentar akan hilang otomatis dari DB. Jika tidak, Anda perlu menghapus manual komentar dulu.
         const { error } = await supabase.from('sales_issues').delete().eq('id', id)
         if (error) throw error
 
@@ -589,6 +585,12 @@ export default function SummaryPage() {
     if (st === 'IN PROGRESS') return 'bg-amber-100 text-amber-700 border-amber-200'
     return 'bg-blue-100 text-blue-700 border-blue-200'
   }
+
+  // --- LOGIC TAMBAHAN: Cek Apakah Admin Pernah Reply ---
+  // Kita cek apakah di state 'comments' ada minimal 1 komentar yang is_admin === true
+  const hasAdminReplied = useMemo(() => {
+    return comments.some(c => c.is_admin)
+  }, [comments])
 
   if (authChecking) return <div className="min-h-screen flex justify-center items-center"><Loader2 className="animate-spin text-blue-600"/></div>
 
@@ -771,9 +773,8 @@ export default function SummaryPage() {
                         {selectedIssue.status !== 'CLOSED' && (
                             <div className="flex flex-col gap-2">
                                 
-                                {/* AREA PREVIEW FILE (DIPERBAIKI: Ukuran Mini & Fix X Terpotong) */}
+                                {/* AREA PREVIEW FILE */}
                                 {chatFiles.length > 0 && (
-                                    // TAMBAHKAN 'pt-3' DISINI AGAR TOMBOL X TIDAK TERPOTONG
                                     <div className="flex gap-3 overflow-x-auto pt-3 pb-2 px-1 scrollbar-hide">
                                         {chatFiles.map((file, idx) => (
                                             <div key={idx} className="relative shrink-0 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 w-32 shadow-sm animate-in fade-in zoom-in duration-200">
@@ -785,7 +786,7 @@ export default function SummaryPage() {
                                                     <span className="text-[9px] text-slate-400">{(file.size / 1024).toFixed(0)} KB</span>
                                                 </div>
                                                 
-                                                {/* TOMBOL HAPUS (Diperkecil & Posisi disesuaikan) */}
+                                                {/* TOMBOL HAPUS */}
                                                 <button 
                                                     type="button" 
                                                     onClick={() => handleRemoveFile(idx)} 
@@ -847,9 +848,12 @@ export default function SummaryPage() {
                             </div>
                         )}
                         <div className="flex items-center justify-end border-t border-slate-100 dark:border-slate-800 pt-2">
-                            {isAdmin && selectedIssue.status !== 'CLOSED' && selectedIssue.status !== 'WAITING CONFIRMATION' && (
+                            {/* LOGIC TOMBOL AJUKAN SELESAI */}
+                            {/* Kondisi: Admin + Belum Closed + Belum Waiting + SUDAH ADA REPLY ADMIN */}
+                            {isAdmin && selectedIssue.status !== 'CLOSED' && selectedIssue.status !== 'WAITING CONFIRMATION' && hasAdminReplied && (
                                 <button onClick={handleAdminProposeResolve} className="text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"><CheckCircle size={14}/> Ajukan Selesai</button>
                             )}
+                            
                             {selectedIssue.status === 'WAITING CONFIRMATION' && (
                                 <>
                                     {currentUserEmail === selectedIssue.profiles?.email ? (
