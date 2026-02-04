@@ -158,7 +158,7 @@ export default function ImportDataPage() {
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.protection = { locked: true };
 
-    for (let i = 2; i <= 5000; i++) {
+    for (let i = 2; i <= 10000; i++) {
         const row = sheet.getRow(i);
         row.protection = { locked: false };
 
