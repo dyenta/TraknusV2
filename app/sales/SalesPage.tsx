@@ -105,7 +105,8 @@ const YearOverYearBadge = ({ current, previous }: { current: number, previous: n
   )
 }
 
-const DimensionSelectBox = ({ label, value, onChange, options }: any) => {
+// Cari komponen ini di bagian HELPER COMPONENTS
+const DimensionSelectBox = ({ label, value, onChange, options, disabled }: any) => { // <--- Tambah 'disabled' disini
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -122,19 +123,22 @@ const DimensionSelectBox = ({ label, value, onChange, options }: any) => {
   const selectedLabel = options.find((option: any) => option.value === value)?.label || "Select...";
 
   return (
-    <div className="flex flex-col w-full relative" ref={containerRef}>
+    <div className={`flex flex-col w-full relative ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`} ref={containerRef}>
       <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1 mb-0.5 uppercase">
         {label}
       </label>
       <button 
-        onClick={() => setIsOpen(!isOpen)} 
+        disabled={disabled} // <--- Pasang properti disabled
+        onClick={() => !disabled && setIsOpen(!isOpen)} 
         className={`flex items-center justify-between gap-2 w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded-md shadow-sm transition-colors text-left 
-          ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+          ${isOpen ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}
+          ${disabled ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 pointer-events-none' : ''} 
+          `}> 
         <span className="truncate font-medium text-slate-700 dark:text-slate-200">{selectedLabel}</span>
         <ChevronDown size={14} className="text-slate-400 shrink-0" />
       </button>
       
-      {isOpen && (
+      {isOpen && !disabled && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 md:bg-transparent md:p-0 md:absolute md:inset-auto md:top-full md:left-0 md:block md:mt-1">
           <div className="absolute inset-0 md:hidden" onClick={() => setIsOpen(false)}></div>
           <div className="relative w-full max-w-xs md:w-full min-w-37.5 max-h-[50vh] overflow-y-auto bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg shadow-xl z-10 animate-in fade-in zoom-in-95 duration-200 py-1 flex flex-col">
@@ -1298,13 +1302,43 @@ export default function SalesPage() {
            </div>
            
            <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 w-full">
-             <DimensionSelectBox label="Level 1" value={level1Field} onChange={setLevel1Field} options={HIERARCHY_OPTIONS} />
-             <DimensionSelectBox label="Level 2" value={level2Field} onChange={setLevel2Field} options={HIERARCHY_OPTIONS} />
-             <DimensionSelectBox label="Level 3" value={level3Field} onChange={setLevel3Field} options={HIERARCHY_OPTIONS} />
-             <DimensionSelectBox label="Level 4" value={level4Field} onChange={setLevel4Field} options={HIERARCHY_OPTIONS} />
-             <DimensionSelectBox label="Level 5" value={level5Field} onChange={setLevel5Field} options={HIERARCHY_OPTIONS} />
-             <DimensionSelectBox label="Level 6" value={level6Field} onChange={setLevel6Field} options={HIERARCHY_OPTIONS} />
-           </div>
+            {[
+              { val: level1Field, set: setLevel1Field, label: 'Level 1' },
+              { val: level2Field, set: setLevel2Field, label: 'Level 2' },
+              { val: level3Field, set: setLevel3Field, label: 'Level 3' },
+              { val: level4Field, set: setLevel4Field, label: 'Level 4' },
+              { val: level5Field, set: setLevel5Field, label: 'Level 5' },
+              { val: level6Field, set: setLevel6Field, label: 'Level 6' },
+            ].map((item, index, allLevels) => {
+              
+              // 1. Logika Eksklusif (Hapus opsi yang sudah dipilih di level lain)
+              const selectedElsewhere = allLevels
+                .filter((_, i) => i !== index)
+                .map(x => x.val)
+                .filter(v => v !== '');
+
+              const filteredOptions = HIERARCHY_OPTIONS.filter(opt => 
+                opt.value === '' || !selectedElsewhere.includes(opt.value)
+              );
+
+              // 2. Logika Sekuensial (Disable jika level sebelumnya kosong)
+              const isDisabled = index > 0 && allLevels[index - 1].val === '';
+
+              return (
+                <DimensionSelectBox
+                  key={index}
+                  label={item.label}
+                  value={item.val}
+                  onChange={(newValue: string) => {
+                    item.set(newValue);
+                    // Opsional: Jika user mereset Level 1, level bawahnya bisa ikut di-reset manual disini jika diinginkan
+                  }}
+                  options={filteredOptions}
+                  disabled={isDisabled} 
+                />
+              );
+            })}
+          </div>
         </div>
 
         {/* DATA TABLE */}
