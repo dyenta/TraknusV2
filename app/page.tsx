@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown } from 'lucide-react'
+import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown, BarChart3 } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { useTheme } from './components/ThemeProvider'
@@ -109,6 +109,16 @@ export default function MenuPage() {
       bg: "bg-blue-50 dark:bg-blue-900/20",
       borderHover: "hover:border-blue-500 dark:hover:border-blue-500",
       restricted: true, 
+    },
+    {
+      title: "Actual vs Plan",
+      desc: "Komparasi target (Plan) vs realisasi (Actual) tahun berjalan.",
+      href: "/actual-vs-plan", // Pastikan foldernya bernama 'actual-vs-plan' di app router
+      icon: BarChart3, // Icon ini sudah di-import di atas
+      color: "text-orange-600 dark:text-orange-400",
+      bg: "bg-orange-50 dark:bg-orange-900/20",
+      borderHover: "hover:border-orange-500 dark:hover:border-orange-500",
+      restricted: true, // Restriksi sama seperti Sales Analytics
     },
   ]
 
