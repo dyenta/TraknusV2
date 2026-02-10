@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown, BarChart3 } from 'lucide-react'
+import { LayoutGrid, FileWarning, LayoutList, LogOut, ArrowRight, User, Phone, Mail, Sun, Moon, Laptop, ChevronDown, BarChart3, Truck } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { useTheme } from './components/ThemeProvider'
@@ -15,12 +15,9 @@ export default function MenuPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [userPhone, setUserPhone] = useState<string | null>(null)
-  // [BARU] State untuk menyimpan hak akses (HO, BRANCH, CUSTOMER)
   const [userAccess, setUserAccess] = useState<string | null>(null)
   
   const [isLoading, setIsLoading] = useState(true)
-  
-  // State untuk Dropdown Tema
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const supabase = createBrowserClient(
@@ -37,28 +34,23 @@ export default function MenuPage() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('*') // Pastikan kolom 'akses' ada di tabel profiles
+          .select('*') 
           .eq('user_id', user.id)
           .single()
 
         if (profile) {
           setUserName(profile.full_name || 'Pengguna')
           setUserPhone(profile.phone_number || '-')
-          // [BARU] Simpan data akses ke state
           setUserAccess(profile.akses || null) 
-          
           if (profile.email) setUserEmail(profile.email)
         } else {
           setUserName(user.user_metadata?.full_name || 'Pengguna')
           setUserPhone(user.user_metadata?.phone_number || '-')
-          // Jika tidak ada profile di DB, anggap tidak punya akses khusus
           setUserAccess(null)
         }
       }
-
       setIsLoading(false)
     }
-
     getData()
   }, [supabase])
 
@@ -68,7 +60,6 @@ export default function MenuPage() {
     router.push('/login')
   }
 
-  // --- HELPER UNTUK ICON TEMA ---
   const getThemeIcon = (t: string) => {
     switch (t) {
       case 'light': return <Sun size={14} />
@@ -78,7 +69,6 @@ export default function MenuPage() {
     }
   }
 
-  // --- CONFIG MENU ---
   const allMenuItems = [
     {
       title: "Sales Issues",
@@ -120,32 +110,51 @@ export default function MenuPage() {
       borderHover: "hover:border-orange-500 dark:hover:border-orange-500",
       restricted: true,
     },
+    {
+      title: "OTIF Analytics",
+      desc: "Monitoring performa pengiriman On Time In Full (OTIF).",
+      href: "/otif",
+      icon: Truck,
+      color: "text-purple-600 dark:text-purple-400",
+      bg: "bg-purple-50 dark:bg-purple-900/20",
+      borderHover: "hover:border-purple-500 dark:hover:border-purple-500",
+      restricted: true,
+    },
   ]
 
-  // [BARU] Logika filter berdasarkan kolom 'akses' dari database
   const visibleMenuItems = allMenuItems.filter((item) => {
-    // 1. Jika menu tidak dibatasi, tampilkan untuk semua
     if (!item.restricted) return true
-    
-    // 2. Jika menu dibatasi (Sales Analytics), cek userAccess
-    // Tampilkan jika user memiliki akses DAN aksesnya BUKAN 'CUSTOMER'
-    // Artinya: HO dan BRANCH boleh melihat, CUSTOMER tidak boleh.
     if (userAccess && userAccess !== 'CUSTOMER') {
       return true
     }
-
-    // Default sembunyikan jika logika di atas tidak terpenuhi
     return false
   })
 
+  // [LOGIKA GRID BARU]
+  // Menggunakan grid-cols-6 agar bisa membagi layout:
+  // - Baris 1: 2 item (masing-masing span-3 = 50%)
+  // - Baris 2: 3 item (masing-masing span-2 = 33.3%)
   const getGridClass = (count: number) => {
     switch (count) {
+      case 5: return "md:grid-cols-6 max-w-6xl mx-auto" // Layout khusus 2 atas, 3 bawah
       case 4: return "md:grid-cols-2 max-w-4xl mx-auto"
-      case 3: return "md:grid-cols-3"
+      case 3: return "md:grid-cols-3 max-w-6xl mx-auto"
       case 2: return "md:grid-cols-2 max-w-4xl mx-auto"
       case 1: return "md:grid-cols-1 max-w-md mx-auto"
       default: return "md:grid-cols-2 max-w-4xl mx-auto"
     }
+  }
+
+  // [LOGIKA SPAN ITEM]
+  // Mengatur lebar per item khusus jika jumlah total item adalah 5
+  const getItemSpanClass = (index: number, total: number) => {
+    if (total === 5) {
+      // 2 Item pertama (index 0 & 1) -> Span 3 (setengah layar)
+      if (index < 2) return "md:col-span-3"
+      // 3 Item berikutnya -> Span 2 (sepertiga layar)
+      return "md:col-span-2"
+    }
+    return "" // Default behavior
   }
 
   if (isLoading) {
@@ -171,16 +180,12 @@ export default function MenuPage() {
             Portal Aplikasi
           </h1>
           
-          {/* CONTAINER: PROFILE + ACTIONS */}
           <div className="flex flex-col xl:flex-row items-center gap-3 w-full justify-center relative z-20">
-            
             {/* KARTU PROFIL */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full px-6 py-2 shadow-sm flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-slate-600 dark:text-slate-300">
               <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
                 <User size={16} className="text-emerald-600" />
                 <span>{userName}</span>
-                {/* Opsional: Menampilkan Role/Akses untuk debugging */}
-                {/* <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">{userAccess}</span> */}
               </div>
               <div className="hidden md:block w-px h-4 bg-slate-300 dark:bg-slate-700"></div>
               <div className="flex items-center gap-2">
@@ -194,10 +199,7 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* ACTION GROUP: THEME DROPDOWN + LOGOUT */}
             <div className="flex items-center gap-2">
-              
-              {/* 1. THEME DROPDOWN */}
               <div className="relative">
                 <button 
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -208,7 +210,6 @@ export default function MenuPage() {
                   <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
                 </button>
 
-                {/* Dropdown Menu */}
                 <div className={`absolute top-full right-0 mt-2 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right z-50 ${isDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
                   {['light', 'dark', 'system'].map((m: any) => (
                     <button
@@ -226,7 +227,6 @@ export default function MenuPage() {
                 </div>
               </div>
 
-              {/* 2. LOGOUT BUTTON */}
               <button 
                 onClick={handleLogout}
                 className="group flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-800 transition-all text-sm font-bold shadow-sm"
@@ -235,7 +235,6 @@ export default function MenuPage() {
                 <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform"/>
                 <span className="hidden sm:inline">Keluar</span>
               </button>
-
             </div>
           </div>
         </div>
@@ -243,7 +242,12 @@ export default function MenuPage() {
         {/* MENU GRID */}
         <div className={`grid grid-cols-1 gap-4 w-full transition-all duration-500 ${getGridClass(visibleMenuItems.length)}`}>
           {visibleMenuItems.map((item, index) => (
-            <Link key={index} href={item.href} className="group relative h-full">
+            <Link 
+              key={index} 
+              href={item.href} 
+              // Tambahkan getItemSpanClass di sini untuk mengatur lebar kolom
+              className={`group relative h-full ${getItemSpanClass(index, visibleMenuItems.length)}`}
+            >
               <div className={`h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${item.borderHover} flex flex-col justify-between`}>
                 
                 <div className="flex flex-col items-center text-center md:items-start md:text-left">

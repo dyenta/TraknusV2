@@ -997,6 +997,12 @@ export default function ActualVsPlanPage() {
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50">
                           <Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span>
                         </button>
+                        {userRole === 'HO' && (
+                          <button onClick={() => router.push('/import-plan')} 
+                          className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                          <Upload size={14} className="text-emerald-500"/> <span>Import Data Plan</span>
+                          </button>
+                        )}
 
                         <button onClick={() => router.push('/')} 
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
