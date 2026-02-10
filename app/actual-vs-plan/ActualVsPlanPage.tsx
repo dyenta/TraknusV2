@@ -643,26 +643,76 @@ export default function ActualVsPlanPage() {
     return () => document.removeEventListener("mousedown", handleClickOutsideMenu);
   }, []);
 
+  const fetchFilterOptions = useCallback(async () => {
+    // Query mv_actual_vs_plan langsung untuk ambil opsi filter (tanpa get_dynamic_filter_options)
+    let query = supabase
+      .from('mv_actual_vs_plan')
+      .select('year, month, area, business_area, pss, key_account_type, cust_group, cust_name, product');
+
+    // Terapkan filter aktif agar cascading
+    if (!selectedYears.includes('All') && selectedYears.length > 0) {
+      query = query.in('year', selectedYears.map(Number));
+    }
+    if (!selectedMonths.includes('All') && selectedMonths.length > 0) {
+      query = query.in('month', selectedMonths.map(Number));
+    }
+    if (!selectedAreas.includes('All') && selectedAreas.length > 0) {
+      query = query.in('area', selectedAreas);
+    }
+    if (!selectedBusinessAreas.includes('All') && selectedBusinessAreas.length > 0) {
+      query = query.in('business_area', selectedBusinessAreas);
+    }
+    if (!selectedPSS.includes('All') && selectedPSS.length > 0) {
+      query = query.in('pss', selectedPSS);
+    }
+    if (!selectedKeyAccountTypes.includes('All') && selectedKeyAccountTypes.length > 0) {
+      query = query.in('key_account_type', selectedKeyAccountTypes);
+    }
+    if (!selectedCustomerGroups.includes('All') && selectedCustomerGroups.length > 0) {
+      query = query.in('cust_group', selectedCustomerGroups);
+    }
+    if (!selectedProducts.includes('All') && selectedProducts.length > 0) {
+      query = query.in('product', selectedProducts);
+    }
+    if (!selectedCustomerNames.includes('All') && selectedCustomerNames.length > 0) {
+      query = query.in('cust_name', selectedCustomerNames);
+    }
+
+    const { data: filterData, error } = await query.limit(100000);
+
+    if (error) {
+      console.error('Filter options query error:', error);
+      return;
+    }
+
+    if (filterData && filterData.length > 0) {
+      const uniqueSorted = (key: string): any[] => {
+        const vals = [...new Set(filterData.map((d: any) => d[key]))]
+          .filter(v => v != null && String(v).trim() !== '');
+        return vals.sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+      };
+
+      setFilterOptions({
+        years: uniqueSorted('year'),
+        months: mapAvailableMonths(uniqueSorted('month')),
+        areas: uniqueSorted('area'),
+        businessAreas: uniqueSorted('business_area'),
+        pss: uniqueSorted('pss'),
+        keyAccountTypes: uniqueSorted('key_account_type'),
+        products: uniqueSorted('product'),
+        customerGroups: uniqueSorted('cust_group'),
+        customerNames: uniqueSorted('cust_name'),
+      });
+    }
+  }, [
+    selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas,
+    selectedPSS, selectedKeyAccountTypes, selectedCustomerGroups,
+    selectedProducts, selectedCustomerNames, supabase
+  ]);
+
   const fetchAnalyticsData = useCallback(async () => {
     if (isAuthChecking) return;
     setIsLoading(true); 
-
-    const getFilterArray = (arr: string[]) => (arr.includes('All') || !arr.length) ? null : arr;
-    
-    // Fetch filter options (p_material & p_material_description wajib dikirim walau null)
-    const optionsRpcArgs = { 
-      p_year: getFilterArray(selectedYears), 
-      p_month: getFilterArray(selectedMonths), 
-      p_area: getFilterArray(selectedAreas), 
-      p_ba: getFilterArray(selectedBusinessAreas), 
-      p_pss: getFilterArray(selectedPSS), 
-      p_kat: getFilterArray(selectedKeyAccountTypes),
-      p_cust_group: getFilterArray(selectedCustomerGroups), 
-      p_product: getFilterArray(selectedProducts), 
-      p_cust_name: getFilterArray(selectedCustomerNames),
-      p_material: null,
-      p_material_description: null,
-    };
 
     // Fetch actual vs plan data
     const dataParams = {
@@ -684,28 +734,13 @@ export default function ActualVsPlanPage() {
     };
 
     try {
-      const [optionsRes, dataRes] = await Promise.all([ 
-          supabase.rpc('get_dynamic_filter_options', optionsRpcArgs), 
-          supabase.rpc('get_actual_vs_plan', dataParams), 
+      // Jalankan filter options & data secara paralel
+      const [, dataRes] = await Promise.all([
+        fetchFilterOptions(),
+        supabase.rpc('get_actual_vs_plan', dataParams),
       ]);
       
-      if (optionsRes.error) console.error('Options RPC error:', optionsRes.error);
       if (dataRes.error) console.error('Data RPC error:', dataRes.error);
-      
-      if (optionsRes.data) {
-        setFilterOptions({ 
-          years: optionsRes.data?.year || [], 
-          months: mapAvailableMonths(optionsRes.data?.month || []),
-          areas: optionsRes.data?.area || [], 
-          businessAreas: optionsRes.data?.business_area || [], 
-          pss: optionsRes.data?.pss || [], 
-          keyAccountTypes: optionsRes.data?.key_account_type || [], 
-          products: optionsRes.data?.product || [], 
-          customerGroups: optionsRes.data?.cust_group || [], 
-          customerNames: optionsRes.data?.cust_name || [],
-        });
-      }
-      
       if (dataRes.data) setRawData(dataRes.data);
 
     } catch (e) { 
@@ -718,7 +753,7 @@ export default function ActualVsPlanPage() {
     selectedPSS, selectedKeyAccountTypes, selectedCustomerGroups, 
     selectedProducts, selectedCustomerNames,
     level1Field, level2Field, level3Field, level4Field, level5Field, level6Field,
-    supabase, isAuthChecking
+    supabase, isAuthChecking, fetchFilterOptions
   ]);
 
   useEffect(() => { 
