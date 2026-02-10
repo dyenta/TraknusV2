@@ -964,7 +964,7 @@ export default function ActualVsPlanPage() {
                         </button>
 
                         <button onClick={() => router.push('/')} 
-                          className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
+                          className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                           <LogOut size={14} className="text-blue-500"/> <span>Menu</span>
                         </button>
                       </div>

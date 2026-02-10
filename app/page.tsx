@@ -108,17 +108,17 @@ export default function MenuPage() {
       color: "text-blue-600 dark:text-blue-400",
       bg: "bg-blue-50 dark:bg-blue-900/20",
       borderHover: "hover:border-blue-500 dark:hover:border-blue-500",
-      restricted: true, 
+      restricted: true,
     },
     {
       title: "Actual vs Plan",
       desc: "Komparasi target (Plan) vs realisasi (Actual) tahun berjalan.",
-      href: "/actual-vs-plan", // Pastikan foldernya bernama 'actual-vs-plan' di app router
-      icon: BarChart3, // Icon ini sudah di-import di atas
+      href: "/actual-vs-plan",
+      icon: BarChart3,
       color: "text-orange-600 dark:text-orange-400",
       bg: "bg-orange-50 dark:bg-orange-900/20",
       borderHover: "hover:border-orange-500 dark:hover:border-orange-500",
-      restricted: true, // Restriksi sama seperti Sales Analytics
+      restricted: true,
     },
   ]
 
@@ -140,10 +140,11 @@ export default function MenuPage() {
 
   const getGridClass = (count: number) => {
     switch (count) {
+      case 4: return "md:grid-cols-2 max-w-4xl mx-auto"
       case 3: return "md:grid-cols-3"
       case 2: return "md:grid-cols-2 max-w-4xl mx-auto"
       case 1: return "md:grid-cols-1 max-w-md mx-auto"
-      default: return "md:grid-cols-3"
+      default: return "md:grid-cols-2 max-w-4xl mx-auto"
     }
   }
 
@@ -159,14 +160,14 @@ export default function MenuPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 md:p-8 font-sans transition-colors duration-300">
+    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 md:p-6 font-sans transition-colors duration-300">
       
-      <div className="w-full max-w-6xl space-y-10">
+      <div className="w-full max-w-6xl space-y-6">
         
         {/* HEADER SECTION */}
-        <div className="flex flex-col items-center space-y-4">
-          <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-15 h-15 rounded-xl mb-4 shadow-sm"/>
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100 tracking-tight text-center">
+        <div className="flex flex-col items-center space-y-3">
+          <img src="/favicon.ico" alt="Logo" className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-2 shadow-sm"/>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight text-center">
             Portal Aplikasi
           </h1>
           
@@ -240,25 +241,25 @@ export default function MenuPage() {
         </div>
 
         {/* MENU GRID */}
-        <div className={`grid grid-cols-1 gap-6 w-full transition-all duration-500 ${getGridClass(visibleMenuItems.length)}`}>
+        <div className={`grid grid-cols-1 gap-4 w-full transition-all duration-500 ${getGridClass(visibleMenuItems.length)}`}>
           {visibleMenuItems.map((item, index) => (
             <Link key={index} href={item.href} className="group relative h-full">
-              <div className={`h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${item.borderHover} flex flex-col justify-between`}>
+              <div className={`h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${item.borderHover} flex flex-col justify-between`}>
                 
                 <div className="flex flex-col items-center text-center md:items-start md:text-left">
-                  <div className={`w-16 h-16 rounded-2xl ${item.bg} flex items-center justify-center mb-6 transition-transform group-hover:scale-110 duration-300 shadow-sm`}>
-                    <item.icon size={32} className={item.color} />
+                  <div className={`w-12 h-12 rounded-xl ${item.bg} flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-300 shadow-sm`}>
+                    <item.icon size={24} className={item.color} />
                   </div>
                   
-                  <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-3 group-hover:text-slate-900 dark:group-hover:text-white">
+                  <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100 mb-2 group-hover:text-slate-900 dark:group-hover:text-white">
                     {item.title}
                   </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-2">
                     {item.desc}
                   </p>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/50 w-full flex items-center justify-center md:justify-start text-sm font-semibold text-slate-400 dark:text-slate-500 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/50 w-full flex items-center justify-center md:justify-start text-sm font-semibold text-slate-400 dark:text-slate-500 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
                   <span>Akses Modul</span>
                   <ArrowRight size={16} className="ml-2 transition-transform group-hover:translate-x-1" />
                 </div>
