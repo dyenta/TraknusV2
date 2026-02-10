@@ -1107,7 +1107,7 @@ export default function SalesPage() {
                                     </button>
                                     <button onClick={() => router.push('/actual-vs-plan')} 
                                       className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
-                                      <BarChart3 size={14} className="text-blue-500"/> <span>Sales Analytics</span>
+                                      <BarChart3 size={14} className="text-orange-500"/> <span>Actual vs Plan</span>
                                     </button>
                                  </div>
                                  <div className="p-1.5">

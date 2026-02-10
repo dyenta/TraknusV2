@@ -7,7 +7,7 @@ import {
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Upload,
   Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList,
   ArrowDownAZ, ArrowDown01, SortAsc, SortDesc, Download, Target,
-  BarChart2
+  BarChart2, LayoutGrid
 } from 'lucide-react'
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -953,7 +953,7 @@ export default function ActualVsPlanPage() {
                         </button>
                         <button onClick={() => router.push('/sales')} 
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
-                          <BarChart3 size={14} className="text-blue-500"/> <span>Sales Analytics</span>
+                          <LayoutGrid size={14} className="text-blue-500"/> <span>Sales Analytics</span>
                         </button>
                       </div>
                       <div className="p-1.5">
