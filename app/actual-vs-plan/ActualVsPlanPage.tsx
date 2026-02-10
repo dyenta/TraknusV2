@@ -6,7 +6,8 @@ import {
   Database, ArrowUp, ArrowDown, ChevronDown, Check, ZoomIn, 
   ZoomOut, Maximize, Search, X, BarChart3, LogOut, Sun, Upload,
   Moon, Laptop, Loader2, MoreVertical, FileWarning, LayoutList,
-  ArrowDownAZ, ArrowDown01, SortAsc, SortDesc, Download
+  ArrowDownAZ, ArrowDown01, SortAsc, SortDesc, Download, Target,
+  BarChart2
 } from 'lucide-react'
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -361,6 +362,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
     const actualVal = payload.find((p: any) => p.dataKey === 'actual')?.value || 0;
     const variance = actualVal - planVal;
     const ach = planVal === 0 ? 0 : (actualVal / planVal) * 100;
+    const isAchieved = actualVal >= planVal;
 
     return (
       <div className="bg-white dark:bg-slate-900 p-2.5 border border-slate-200 dark:border-slate-800 shadow-xl rounded-lg text-[10px] z-50 min-w-40">
@@ -368,14 +370,14 @@ const ChartTooltip = ({ active, payload, label }: any) => {
         <div className="flex flex-col gap-1 mb-2">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+              <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
               <span className="text-slate-500 dark:text-slate-400">Plan</span>
             </div>
             <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">{planVal.toLocaleString('id-ID')}</span>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+              <div className={`w-2 h-2 rounded-full ${isAchieved ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
               <span className="text-slate-500 dark:text-slate-400">Actual</span>
             </div>
             <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">{actualVal.toLocaleString('id-ID')}</span>
@@ -949,6 +951,10 @@ export default function ActualVsPlanPage() {
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                           <LayoutList size={14} className="text-emerald-500"/> <span>Lihat Summary Keluhan</span>
                         </button>
+                        <button onClick={() => router.push('/sales')} 
+                          className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                          <BarChart3 size={14} className="text-blue-500"/> <span>Sales Analytics</span>
+                        </button>
                       </div>
                       <div className="p-1.5">
                         <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
@@ -956,13 +962,6 @@ export default function ActualVsPlanPage() {
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50">
                           <Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span>
                         </button>
-                        
-                        {userRole === 'HO' && (
-                          <button onClick={() => router.push('/import-data')} 
-                            className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
-                            <Upload size={14} className="text-emerald-500"/> <span>Import Data Master</span>
-                          </button>
-                        )}
 
                         <button onClick={() => router.push('/')} 
                           className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-red-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
@@ -1029,9 +1028,9 @@ export default function ActualVsPlanPage() {
               </div>
               {/* Summary badges */}
               <div className="hidden md:flex items-center gap-3 text-[10px]">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800">
-                  <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                  <span className="text-blue-700 dark:text-blue-300 font-bold">Plan: {formatNumber(grandPlan)}</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-full border border-indigo-100 dark:border-indigo-800">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                  <span className="text-indigo-700 dark:text-indigo-300 font-bold">Plan: {formatNumber(grandPlan)}</span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-full border border-emerald-100 dark:border-emerald-800">
                   <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
@@ -1053,9 +1052,23 @@ export default function ActualVsPlanPage() {
                   <Legend 
                     verticalAlign="top" 
                     height={30}
-                    formatter={(value: string) => <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">{value}</span>}
+                    content={() => (
+                      <div className="flex items-center justify-center gap-5 text-xs mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></div>
+                          <span className="text-slate-600 dark:text-slate-300 font-medium">Plan</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex gap-0.5">
+                            <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></div>
+                            <div className="w-2.5 h-2.5 rounded-sm bg-amber-500"></div>
+                          </div>
+                          <span className="text-slate-600 dark:text-slate-300 font-medium">Actual <span className="text-[9px] text-slate-400">(≥Plan / &lt;Plan)</span></span>
+                        </div>
+                      </div>
+                    )}
                   />
-                  <Bar dataKey="plan" name="Plan" fill={isDarkMode ? '#60a5fa' : '#93c5fd'} barSize={30} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="plan" name="Plan" fill={isDarkMode ? '#818cf8' : '#6366f1'} barSize={30} radius={[3, 3, 0, 0]} />
                   <Bar dataKey="actual" name="Actual" barSize={30} radius={[3, 3, 0, 0]}>
                     {chartData.map((entry, index) => (
                       <Cell 
@@ -1235,9 +1248,11 @@ export default function ActualVsPlanPage() {
 
                         {/* ACTUAL */}
                         <td className="p-2 text-right border-r border-slate-100 dark:border-slate-800 bg-emerald-50/30 dark:bg-emerald-900/5">
-                          <span className={node.actual ? 'text-slate-900 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-700 font-mono'}>
-                            {formatNumber(node.actual)}
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className={node.actual ? 'text-slate-900 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-700 font-mono'}>
+                              {formatNumber(node.actual)}
+                            </span>
+                          </div>
                         </td>
 
                         {/* VARIANCE */}

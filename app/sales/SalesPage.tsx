@@ -1105,15 +1105,18 @@ export default function SalesPage() {
                                     className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                                       <LayoutList size={14} className="text-emerald-500"/> <span>Lihat Summary Keluhan</span>
                                     </button>
+                                    <button onClick={() => router.push('/actual-vs-plan')} 
+                                      className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                                      <BarChart3 size={14} className="text-blue-500"/> <span>Sales Analytics</span>
+                                    </button>
                                  </div>
                                  <div className="p-1.5">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
                                     <button onClick={handleRefreshDatabase} disabled={isRefreshing} 
                                     className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors disabled:opacity-50">
                                       <Database size={14} className="text-purple-500"/> <span>{isRefreshing ? 'Updating...' : 'Update Database'}</span>
-                                    </button>
+                                    </button>                    
                                     
-                                    {/* MODIFIED: HANYA TAMPIL JIKA USER ROLE ADALAH 'HO' */}
                                     {userRole === 'HO' && (
                                       <button onClick={() => router.push('/import-data')} 
                                       className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
