@@ -581,7 +581,7 @@ export default function OtifDashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-2 md:p-6 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300">
-      <div className="max-w-[1600px] mx-auto space-y-4">
+      <div className="max-w-400 mx-auto space-y-4">
 
         {/* ============================================ */}
         {/* HEADER & FILTERS (SAME STRUCTURE)           */}
@@ -636,6 +636,9 @@ export default function OtifDashboardPage() {
                         <button onClick={() => router.push('/sales')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                           <LayoutGrid size={14} className="text-blue-500"/> <span>Sales Analytics</span>
                         </button>
+                        <button onClick={() => router.push('/actual-vs-plan')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                          <BarChart3 size={14} className="text-orange-500"/> <span>Actual vs Plan</span>
+                        </button>
                       </div>
                       <div className="p-1.5">
                         <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
@@ -671,7 +674,7 @@ export default function OtifDashboardPage() {
         {/* ============================================ */}
         {/* TITLE BANNER                                */}
         {/* ============================================ */}
-        <div className="bg-gradient-to-r from-sky-700 to-sky-900 dark:from-sky-800 dark:to-slate-900 rounded-xl p-4 text-center shadow-md">
+        <div className="bg-linear-to-r from-sky-700 to-sky-900 dark:from-sky-800 dark:to-slate-900 rounded-xl p-4 text-center shadow-md">
           <h2 className="text-xl md:text-2xl font-black text-white tracking-wider uppercase">{selectedTitle}</h2>
         </div>
 
