@@ -44,10 +44,10 @@ const MONTH_SHORT: Record<string, string> = {
 }
 
 const COLORS = {
-  onTime: '#0ea5e9',     // sky-500
-  delay: '#f97316',      // orange-500
-  onTimeDark: '#38bdf8', // sky-400
-  delayDark: '#fb923c',  // orange-400
+  onTime: '#15803d',     // green-700
+  delay: '#dc2626',      // red-600
+  onTimeDark: '#16a34a', // green-600
+  delayDark: '#ef4444',  // red-500
   bar: '#0369a1',        // sky-700
   barDark: '#38bdf8',
 }
@@ -339,8 +339,8 @@ const LeadTimeCard = ({ title, data, isDark }: { title: string; data: { month: s
                 return (
                   <div className="bg-white dark:bg-slate-900 p-2 border border-slate-200 dark:border-slate-700 rounded shadow-lg text-[10px]">
                     <div className="font-bold mb-1">{label}</div>
-                    <div className="text-sky-600">On Time: {row?.on_time} ({row?.on_time_pct}%)</div>
-                    <div className="text-orange-500">Delay: {row?.delay} ({row?.delay_pct}%)</div>
+                    <div className="text-green-800">On Time: {row?.on_time} ({row?.on_time_pct}%)</div>
+                    <div className="text-red-700">Delay: {row?.delay} ({row?.delay_pct}%)</div>
                   </div>
                 )
               }} />
@@ -362,8 +362,8 @@ const LeadTimeCard = ({ title, data, isDark }: { title: string; data: { month: s
             </ResponsiveContainer>
           </div>
           <div className="text-center mt-1 space-y-0.5">
-            <div className="text-[8px] text-sky-600 dark:text-sky-400 font-bold">{onTimePct}% OT</div>
-            <div className="text-[8px] text-orange-500 dark:text-orange-400 font-bold">{delayPct}% DL</div>
+            <div className="text-[8px] text-green-800 dark:text-green-500 font-bold">{onTimePct}% On Time</div>
+            <div className="text-[8px] text-red-700 dark:text-red-500 font-bold">{delayPct}% Delay</div>
           </div>
         </div>
       </div>
@@ -655,14 +655,14 @@ export default function OtifDashboardPage() {
           
           {/* FILTER SECTION */}
           <div className="flex flex-col gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 w-full">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 w-full max-w-2xl">
               <MultiSelect label="Customer Group" options={filterOptions.sheetSources} selectedValues={selectedSheetSources} onChange={setSelectedSheetSources} />
               <MultiSelect label="Plant" options={filterOptions.plants} selectedValues={selectedPlants} onChange={setSelectedPlants} />
               <MultiSelect label="PSS Name" options={filterOptions.pssNames} selectedValues={selectedPSSNames} onChange={setSelectedPSSNames} />
               <MultiSelect label="Customer Name" options={filterOptions.customerNames} selectedValues={selectedCustomerNames} onChange={setSelectedCustomerNames} />
               <MultiSelect label="Product" options={filterOptions.products} selectedValues={selectedProducts} onChange={setSelectedProducts} />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 w-full max-w-2xl">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 w-full max-w-2xl">
               <MultiSelect label="Month Invoice" options={filterOptions.monthInvoices} selectedValues={selectedMonthInvoices} onChange={setSelectedMonthInvoices} />
               <MultiSelect label="Fill Rate" options={filterOptions.fillRates} selectedValues={selectedFillRates} onChange={setSelectedFillRates} />
               <MultiSelect label="Categori Rank" options={filterOptions.categoriRanks} selectedValues={selectedCategoriRanks} onChange={setSelectedCategoriRanks} />
