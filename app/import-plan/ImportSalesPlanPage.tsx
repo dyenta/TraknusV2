@@ -277,7 +277,7 @@ export default function ImportSalesPlanPage() {
         addLog('Menjalankan Refresh Sales Summary...')
         // Asumsi ada RPC untuk refresh materialized view sales plan jika diperlukan
         // Jika tidak ada, baris ini bisa di-comment atau disesuaikan
-        const { error: rpcError } = await supabase.rpc('refresh_sales_data') 
+        const { error: rpcError } = await supabase.rpc('refresh_plan_data') 
         
         if (rpcError) {
              addLog(`Note: Refresh skipped or failed (${rpcError.message}). Data inserted.`)

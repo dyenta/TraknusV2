@@ -644,73 +644,50 @@ export default function ActualVsPlanPage() {
   }, []);
 
   const fetchFilterOptions = useCallback(async () => {
-    // === HELPER: apply common non-year/month filters ===
-    const applyCommonFilters = (q: any) => {
-      if (!selectedAreas.includes('All') && selectedAreas.length > 0) {
-        q = q.in('area', selectedAreas);
-      }
-      if (!selectedBusinessAreas.includes('All') && selectedBusinessAreas.length > 0) {
-        q = q.in('business_area', selectedBusinessAreas);
-      }
-      if (!selectedPSS.includes('All') && selectedPSS.length > 0) {
-        q = q.in('pss', selectedPSS);
-      }
-      if (!selectedKeyAccountTypes.includes('All') && selectedKeyAccountTypes.length > 0) {
-        q = q.in('key_account_type', selectedKeyAccountTypes);
-      }
-      if (!selectedCustomerGroups.includes('All') && selectedCustomerGroups.length > 0) {
-        q = q.in('cust_group', selectedCustomerGroups);
-      }
-      if (!selectedProducts.includes('All') && selectedProducts.length > 0) {
-        q = q.in('product', selectedProducts);
-      }
-      if (!selectedCustomerNames.includes('All') && selectedCustomerNames.length > 0) {
-        q = q.in('cust_name', selectedCustomerNames);
-      }
-      return q;
+    // === HELPER: Semua filter definitions ===
+    const allFilters: Record<string, { selected: string[], column: string, isNumeric?: boolean }> = {
+      year: { selected: selectedYears, column: 'year', isNumeric: true },
+      month: { selected: selectedMonths, column: 'month', isNumeric: true },
+      area: { selected: selectedAreas, column: 'area' },
+      business_area: { selected: selectedBusinessAreas, column: 'business_area' },
+      pss: { selected: selectedPSS, column: 'pss' },
+      key_account_type: { selected: selectedKeyAccountTypes, column: 'key_account_type' },
+      cust_group: { selected: selectedCustomerGroups, column: 'cust_group' },
+      product: { selected: selectedProducts, column: 'product' },
+      cust_name: { selected: selectedCustomerNames, column: 'cust_name' },
     };
 
-    // --- Query 1: Ambil opsi YEAR (TANPA filter year sendiri, agar tidak hilang) ---
-    let yearQuery = supabase
-      .from('mv_actual_vs_plan')
-      .select('year');
-    // Terapkan filter lain KECUALI year, agar year tetap muncul semua
-    if (!selectedMonths.includes('All') && selectedMonths.length > 0) {
-      yearQuery = yearQuery.in('month', selectedMonths.map(Number));
-    }
-    yearQuery = applyCommonFilters(yearQuery);
+    // === HELPER: Build query untuk satu filter, EXCLUDE dirinya sendiri ===
+    const buildQueryFor = (excludeKey: string) => {
+      let q = supabase
+        .from('mv_actual_vs_plan')
+        .select(allFilters[excludeKey].column);
 
-    // --- Query 2: Ambil opsi MONTH (TANPA filter month sendiri) ---
-    let monthQuery = supabase
-      .from('mv_actual_vs_plan')
-      .select('month');
-    // Terapkan year filter + common filters, tapi BUKAN month
-    if (!selectedYears.includes('All') && selectedYears.length > 0) {
-      monthQuery = monthQuery.in('year', selectedYears.map(Number));
-    }
-    monthQuery = applyCommonFilters(monthQuery);
+      // Terapkan semua filter KECUALI yang di-exclude
+      for (const [key, f] of Object.entries(allFilters)) {
+        if (key === excludeKey) continue; // Skip filter sendiri
+        if (!f.selected.includes('All') && f.selected.length > 0) {
+          q = q.in(f.column, f.isNumeric ? f.selected.map(Number) : f.selected);
+        }
+      }
+      return q.limit(100000);
+    };
 
-    // --- Query 3: Ambil opsi filter lainnya (cascading penuh termasuk year & month) ---
-    let cascadeQuery = supabase
-      .from('mv_actual_vs_plan')
-      .select('area, business_area, pss, key_account_type, cust_group, cust_name, product');
-    if (!selectedYears.includes('All') && selectedYears.length > 0) {
-      cascadeQuery = cascadeQuery.in('year', selectedYears.map(Number));
-    }
-    if (!selectedMonths.includes('All') && selectedMonths.length > 0) {
-      cascadeQuery = cascadeQuery.in('month', selectedMonths.map(Number));
-    }
-    cascadeQuery = applyCommonFilters(cascadeQuery);
-
-    const [yearRes, monthRes, cascadeRes] = await Promise.all([
-      yearQuery.limit(100000),
-      monthQuery.limit(100000),
-      cascadeQuery.limit(100000),
+    // === Jalankan semua query secara paralel ===
+    const [
+      yearRes, monthRes, areaRes, baRes, pssRes,
+      katRes, cgRes, prodRes, cnRes
+    ] = await Promise.all([
+      buildQueryFor('year'),
+      buildQueryFor('month'),
+      buildQueryFor('area'),
+      buildQueryFor('business_area'),
+      buildQueryFor('pss'),
+      buildQueryFor('key_account_type'),
+      buildQueryFor('cust_group'),
+      buildQueryFor('product'),
+      buildQueryFor('cust_name'),
     ]);
-
-    if (yearRes.error) console.error('Year filter query error:', yearRes.error);
-    if (monthRes.error) console.error('Month filter query error:', monthRes.error);
-    if (cascadeRes.error) console.error('Cascade filter query error:', cascadeRes.error);
 
     const uniqueSorted = (data: any[], key: string): any[] => {
       if (!data || data.length === 0) return [];
@@ -719,18 +696,16 @@ export default function ActualVsPlanPage() {
       return vals.sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }));
     };
 
-    const cascadeData = cascadeRes.data || [];
-
     setFilterOptions({
       years: uniqueSorted(yearRes.data || [], 'year'),
       months: mapAvailableMonths(uniqueSorted(monthRes.data || [], 'month')),
-      areas: uniqueSorted(cascadeData, 'area'),
-      businessAreas: uniqueSorted(cascadeData, 'business_area'),
-      pss: uniqueSorted(cascadeData, 'pss'),
-      keyAccountTypes: uniqueSorted(cascadeData, 'key_account_type'),
-      products: uniqueSorted(cascadeData, 'product'),
-      customerGroups: uniqueSorted(cascadeData, 'cust_group'),
-      customerNames: uniqueSorted(cascadeData, 'cust_name'),
+      areas: uniqueSorted(areaRes.data || [], 'area'),
+      businessAreas: uniqueSorted(baRes.data || [], 'business_area'),
+      pss: uniqueSorted(pssRes.data || [], 'pss'),
+      keyAccountTypes: uniqueSorted(katRes.data || [], 'key_account_type'),
+      products: uniqueSorted(prodRes.data || [], 'product'),
+      customerGroups: uniqueSorted(cgRes.data || [], 'cust_group'),
+      customerNames: uniqueSorted(cnRes.data || [], 'cust_name'),
     });
   }, [
     selectedYears, selectedMonths, selectedAreas, selectedBusinessAreas,
@@ -793,7 +768,7 @@ export default function ActualVsPlanPage() {
   const handleRefreshDatabase = async () => { 
     if(!confirm("Update Data dari Master?")) return; 
     setIsRefreshing(true); 
-    const { error } = await supabase.rpc('refresh_sales_data'); 
+    const { error } = await supabase.rpc('refresh_plan_data'); 
     if (!error) { 
       await supabase.auth.refreshSession(); 
       alert('Sukses Update DB'); 
