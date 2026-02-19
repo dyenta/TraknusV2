@@ -152,7 +152,14 @@ export default function ImportSalesPlanPage() {
         });
     }
 
+    // Enable AutoFilter pada header row (A1 sampai kolom terakhir)
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: sheet.columns.length }
+    };
+
     await sheet.protect('admin123', {
+        autoFilter: true, // Izinkan user pakai filter walaupun sheet di-protect
         selectLockedCells: false, selectUnlockedCells: true,
         formatCells: false, insertRows: true, deleteRows: true,
         insertColumns: false, deleteColumns: false,

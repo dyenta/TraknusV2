@@ -5,7 +5,8 @@ import {
   RefreshCw, Filter, ChevronDown, Check,
   Search, X, LogOut, Sun, Moon, Laptop, Loader2, 
   MoreVertical, FileWarning, LayoutList, LayoutGrid,
-  Database, BarChart3, Target, Clock, AlertTriangle, TrendingUp, Download
+  Database, BarChart3, Target, Clock, AlertTriangle, TrendingUp, Download,
+  Upload
 } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
@@ -711,7 +712,7 @@ export default function OtifDashboardPage() {
   )
 
   const renderLoadingOverlay = (msg: string) => (
-    <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl">
+    <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-40 flex flex-col items-center justify-center rounded-xl">
       {isRefreshing
         ? <><RefreshCw className="animate-spin text-emerald-600 dark:text-emerald-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500">Updating Database...</span></>
         : <><Loader2 className="animate-spin text-blue-600 dark:text-blue-400 mb-2" size={32}/><span className="text-xs font-bold text-slate-500">{msg}</span></>
@@ -785,6 +786,12 @@ export default function OtifDashboardPage() {
                       </div>
                       <div className="p-1.5">
                         <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1">System</div>
+                        {userRole === 'HO' && (
+                          <button onClick={() => router.push('/import-otif')} 
+                          className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors mb-0.5">
+                          <Upload size={14} className="text-emerald-500"/> <span>Import Data OTIF</span>
+                          </button>
+                        )}
                         <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded transition-colors">
                           <LogOut size={14} className="text-blue-500"/> <span>Menu</span>
                         </button>

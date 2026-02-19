@@ -177,7 +177,14 @@ export default function ImportDataPage() {
         sheet.getCell(`C${i}`).numFmt = 'yyyy-mm-dd';
     }
 
+    // Enable AutoFilter pada header row
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: sheet.columns.length }
+    };
+
     await sheet.protect('admin123', {
+        autoFilter: true,
         selectLockedCells: false, selectUnlockedCells: true,
         formatCells: false, insertRows: true, deleteRows: true,
         insertColumns: false, deleteColumns: false,
